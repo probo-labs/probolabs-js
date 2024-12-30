@@ -1,0 +1,23 @@
+{
+  "name": "probolabs-js",
+  "version": "0.1.0",
+  "description": "DOM element highlighting utilities for testing and automation",
+  "main": "src/highlight.js",
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "dom",
+    "highlight",
+    "testing",
+    "automation",
+    "playwright",
+    "chrome-extension"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/probolabs/probolabs-js"
+  },
+  "author": "Probolabs",
+  "license": "MIT"
+}
