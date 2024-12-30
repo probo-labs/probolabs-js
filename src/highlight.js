@@ -129,69 +129,106 @@ function findNonInteractiveTextAndImageLeafs() {
   });
 }
 
-const highlighter = {
-  execute: function(elementTypes) {
-    // Make sure we have an array
-    const typesArray = Array.isArray(elementTypes) ? elementTypes : [elementTypes];
-    
-    // Add highlight styles if they don't exist
-    if (!document.getElementById('highlight-styles')) {
-      const style = document.createElement('style');
-      style.id = 'highlight-styles';
-      style.textContent = `
-        .extension-highlighted {
-          border: 1px solid red !important;
-          transition: all 0.2s ease-in-out;
-        }
-      `;
-      document.head.appendChild(style);
+// First part: finding elements with CDP
+async function findElements(elementTypes) {
+  const typesArray = Array.isArray(elementTypes) ? elementTypes : [elementTypes];
+  const elements = [];
+
+  typesArray.forEach(elementType => {
+    if (elementType === ElementTag.INPUT_TEXT || elementType === ElementTag.TEXTAREA) {
+      elements.push(...document.querySelectorAll('input'));
+      elements.push(...document.querySelectorAll('textarea'));
+      elements.push(...document.querySelectorAll('[contenteditable="true"]'));
     }
-    
-    console.log('Highlighting elements of types:', typesArray);
+    if (elementType === ElementTag.INPUT_SELECT) {
+      elements.push(...findDropdowns());
+    }
+    if (elementType === ElementTag.INPUT_CHECKBOX) {
+      elements.push(...document.querySelectorAll('input[type="checkbox"]'));
+    }
+    if (elementType === ElementTag.INPUT_RADIO) {
+      elements.push(...document.querySelectorAll('input[type="radio"]'));
+    }
+    if (elementType === ElementTag.BUTTON || elementType === ElementTag.LINK) {
+      elements.push(...findClickables());
+    }
+    if (elementType === ElementTag.LINK) {
+      // Python code also does soup.find_all("a"), so let's add them again:
+      elements.push(...document.querySelectorAll('a'));
+    }
+    if (elementType === ElementTag.TOGGLE_SWITCH) {
+      elements.push(...findToggles());
+    }
+    if (elementType === ElementTag.NON_INTERACTIVE_LEAF) {
+      elements.push(...findNonInteractiveTextAndImageLeafs());
+    }
+  });
 
-    const elements = [];
+  const uniqueElements = uniquifyElements(elements);
+  
+  // Use CDP to get element info
+  for (const element of uniqueElements) {
+    try {
+      // Get the objectId of the element
+      const objectId = await window.chrome.debugger.sendCommand({
+        target: 'page',
+        method: 'DOM.getNodeId',
+        params: { node: element }
+      });
 
-    // Gather elements by each requested type
-    typesArray.forEach(elementType => {
-      if (elementType === ElementTag.INPUT_TEXT || elementType === ElementTag.TEXTAREA) {
-        elements.push(...document.querySelectorAll('input'));
-        elements.push(...document.querySelectorAll('textarea'));
-        elements.push(...document.querySelectorAll('[contenteditable="true"]'));
-      }
-      if (elementType === ElementTag.INPUT_SELECT) {
-        elements.push(...findDropdowns());
-      }
-      if (elementType === ElementTag.INPUT_CHECKBOX) {
-        elements.push(...document.querySelectorAll('input[type="checkbox"]'));
-      }
-      if (elementType === ElementTag.INPUT_RADIO) {
-        elements.push(...document.querySelectorAll('input[type="radio"]'));
-      }
-      if (elementType === ElementTag.BUTTON || elementType === ElementTag.LINK) {
-        elements.push(...findClickables());
-      }
-      if (elementType === ElementTag.LINK) {
-        // Python code also does soup.find_all("a"), so let's add them again:
-        elements.push(...document.querySelectorAll('a'));
-      }
-      if (elementType === ElementTag.TOGGLE_SWITCH) {
-        elements.push(...findToggles());
-      }
-      if (elementType === ElementTag.NON_INTERACTIVE_LEAF) {
-        elements.push(...findNonInteractiveTextAndImageLeafs());
-      }
-    });
+      // Get detailed info including XPath
+      const info = await window.chrome.debugger.sendCommand({
+        target: 'page',
+        method: 'DOM.describeNode',
+        params: { 
+          nodeId: objectId.nodeId,
+          pierce: true
+        }
+      });
 
-    // Deduplicate
-    const uniqueElements = uniquifyElements(elements);
-    
-    // Remove any nested SVGs, then add highlight class
-    uniqueElements.forEach(element => {
-      element.querySelectorAll('svg').forEach(svg => svg.remove());
-      element.classList.add('extension-highlighted');
-    });
+      console.log('Element info:', {
+        xpath: info.node.xpath,
+        nodeId: objectId.nodeId,
+        tag: element.tagName.toLowerCase(),
+        text: element.textContent?.trim() || '',
+        boundingBox: info.node.boundingBox
+      });
+    } catch (e) {
+      console.error('CDP error:', e);
+    }
+  }
 
-    console.log(`Found ${uniqueElements.length} total elements across requested types: [${typesArray.join(', ')}]`);
+  return uniqueElements;
+}
+
+// Second part: highlighting elements
+function highlightElements(elements) {
+  // Add highlight styles if they don't exist
+  if (!document.getElementById('highlight-styles')) {
+    const style = document.createElement('style');
+    style.id = 'highlight-styles';
+    style.textContent = `
+      .extension-highlighted {
+        border: 1px solid red !important;
+        transition: all 0.2s ease-in-out;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Remove any nested SVGs, then add highlight class
+  elements.forEach(element => {
+    element.querySelectorAll('svg').forEach(svg => svg.remove());
+    element.classList.add('extension-highlighted');
+  });
+}
+
+// Main highlight object now uses these separate functions
+const highlighter = {
+  execute: async function(elementTypes) {
+    const elements = await findElements(elementTypes);
+    highlightElements(elements);
+    return elements;
   },
 
   unexecute: function() {
@@ -203,8 +240,6 @@ const highlighter = {
     if (style) {
       style.remove();
     }
-
-    console.log('Removed all highlights');
   }
 };
 
