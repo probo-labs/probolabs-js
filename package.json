@@ -1,6 +1,6 @@
 {
   "name": "probolabs-js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DOM element highlighting utilities for testing and automation",
   "main": "src/highlight.js",
   "files": [

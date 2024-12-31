@@ -1,4 +1,4 @@
-// Define ElementTag enum
+// Public API
 export const ElementTag = {
   INPUT_TEXT: 'INPUT_TEXT',
   TEXTAREA: 'TEXTAREA',
@@ -11,30 +11,108 @@ export const ElementTag = {
   NON_INTERACTIVE_LEAF: 'NON_INTERACTIVE_LEAF'
 };
 
-/**
- * Utility function to remove duplicate DOM elements.
- * If you want more advanced logic (e.g. the XPath-based "shortest prefix" method),
- * you'll need to generate XPaths for elements and compare them.
- */
-function uniquifyElements(elements, shortestPrefix = false) {
-  // Simple approach: use a Set to remove duplicates by element reference.
+export const highlight = {
+  execute: async function(elementTypes) {
+    const elements = await findElements(elementTypes);
+    highlightElements(elements);
+    return elements;
+  },
+
+  unexecute: function() {
+    document.querySelectorAll('.extension-highlighted').forEach(element => {
+      element.classList.remove('extension-highlighted');
+    });
+
+    const style = document.getElementById('highlight-styles');
+    if (style) {
+      style.remove();
+    }
+  },
+
+  getElementInfo
+};
+
+// Helper function that's also useful publicly
+function getElementInfo(element) {
+  // Get CSS selector
+  const getCssPath = (el) => {
+    const path = [];
+    while (el.nodeType === Node.ELEMENT_NODE) {
+      let selector = el.nodeName.toLowerCase();
+      if (el.id) {
+        selector = `#${el.id}`;
+        path.unshift(selector);
+        break;
+      } else {
+        let sibling = el;
+        let nth = 1;
+        while (sibling = sibling.previousElementSibling) {
+          if (sibling.nodeName.toLowerCase() === selector) nth++;
+        }
+        if (nth > 1) selector += `:nth-of-type(${nth})`;
+      }
+      path.unshift(selector);
+      el = el.parentNode;
+    }
+    return path.join(' > ');
+  };
+
+  // Get XPath
+  const getXPath = (el) => {
+    if (!el) return '';
+    if (el.id) return `//*[@id="${el.id}"]`;
+    
+    const path = [];
+    while (el && el.nodeType === Node.ELEMENT_NODE) {
+      let selector = el.nodeName.toLowerCase();
+      let sibling = el;
+      let siblingCount = 0;
+      
+      while (sibling = sibling.previousElementSibling) {
+        if (sibling.nodeName.toLowerCase() === selector) siblingCount++;
+      }
+      
+      if (siblingCount) {
+        selector += `[${siblingCount + 1}]`;
+      }
+      
+      path.unshift(selector);
+      el = el.parentNode;
+    }
+    
+    return '/' + path.join('/');
+  };
+
+  // Get bounding box
+  const rect = element.getBoundingClientRect();
+  
+  return {
+    tag: element.tagName.toLowerCase(),
+    html: element.outerHTML,
+    text: element.textContent?.trim() || '',
+    type: element.getAttribute('type') || '',
+    css_selector: getCssPath(element),
+    xpath: getXPath(element),
+    bounding_box: {
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height
+    }
+  };
+}
+
+// Private helper functions
+function uniquifyElements(elements) {
   return Array.from(new Set(elements));
 }
 
 function findDropdowns() {
   const dropdowns = [];
-  // Native select elements
   dropdowns.push(...document.querySelectorAll('select'));
-
-  // Elements with dropdown roles
   dropdowns.push(...document.querySelectorAll('[role="combobox"], [role="listbox"], [role="dropdown"]'));
-
-  // Common dropdown class patterns
   dropdowns.push(...document.querySelectorAll('[class*="dropdown" i], [class*="select" i], [class*="combobox" i]'));
-
-  // Elements with aria-haspopup attribute
   dropdowns.push(...document.querySelectorAll('[aria-haspopup="true"], [aria-haspopup="listbox"]'));
-
   return uniquifyElements(dropdowns);
 }
 
@@ -118,7 +196,6 @@ function findToggles() {
 }
 
 function findNonInteractiveTextAndImageLeafs() {
-  // Naive approach to replicate the Python logic for non-interactive leaf elements.
   const all = Array.from(document.querySelectorAll('p, span, div, img'));
   const leaves = all.filter(element => !element.firstElementChild);
 
@@ -129,11 +206,11 @@ function findNonInteractiveTextAndImageLeafs() {
   });
 }
 
-// First part: finding elements with CDP
 async function findElements(elementTypes) {
   const typesArray = Array.isArray(elementTypes) ? elementTypes : [elementTypes];
-  const elements = [];
+  console.log('🔍 Starting element search for types:', typesArray);
 
+  const elements = [];
   typesArray.forEach(elementType => {
     if (elementType === ElementTag.INPUT_TEXT || elementType === ElementTag.TEXTAREA) {
       elements.push(...document.querySelectorAll('input'));
@@ -153,7 +230,6 @@ async function findElements(elementTypes) {
       elements.push(...findClickables());
     }
     if (elementType === ElementTag.LINK) {
-      // Python code also does soup.find_all("a"), so let's add them again:
       elements.push(...document.querySelectorAll('a'));
     }
     if (elementType === ElementTag.TOGGLE_SWITCH) {
@@ -166,90 +242,39 @@ async function findElements(elementTypes) {
 
   const uniqueElements = uniquifyElements(elements);
   
-  // Use CDP to get element info
-  for (const element of uniqueElements) {
-    try {
-      // Get the objectId of the element
-      const objectId = await window.chrome.debugger.sendCommand({
-        target: 'page',
-        method: 'DOM.getNodeId',
-        params: { node: element }
-      });
-
-      // Get detailed info including XPath
-      const info = await window.chrome.debugger.sendCommand({
-        target: 'page',
-        method: 'DOM.describeNode',
-        params: { 
-          nodeId: objectId.nodeId,
-          pierce: true
-        }
-      });
-
-      console.log('Element info:', {
-        xpath: info.node.xpath,
-        nodeId: objectId.nodeId,
-        tag: element.tagName.toLowerCase(),
-        text: element.textContent?.trim() || '',
-        boundingBox: info.node.boundingBox
-      });
-    } catch (e) {
-      console.error('CDP error:', e);
-    }
-  }
+  // Log detailed info for each element
+  console.log(`Found ${uniqueElements.length} elements:`);
+  uniqueElements.forEach((element, index) => {
+    console.log(`Element ${index + 1}:`, getElementInfo(element));
+  });
 
   return uniqueElements;
 }
 
-// Second part: highlighting elements
 function highlightElements(elements) {
-  // Add highlight styles if they don't exist
   if (!document.getElementById('highlight-styles')) {
     const style = document.createElement('style');
     style.id = 'highlight-styles';
     style.textContent = `
       .extension-highlighted {
-        border: 1px solid red !important;
+        border: 2px solid red !important;
         transition: all 0.2s ease-in-out;
       }
     `;
     document.head.appendChild(style);
   }
 
-  // Remove any nested SVGs, then add highlight class
   elements.forEach(element => {
     element.querySelectorAll('svg').forEach(svg => svg.remove());
     element.classList.add('extension-highlighted');
   });
 }
 
-// Main highlight object now uses these separate functions
-const highlighter = {
-  execute: async function(elementTypes) {
-    const elements = await findElements(elementTypes);
-    highlightElements(elements);
-    return elements;
-  },
-
-  unexecute: function() {
-    document.querySelectorAll('.extension-highlighted').forEach(element => {
-      element.classList.remove('extension-highlighted');
-    });
-
-    const style = document.getElementById('highlight-styles');
-    if (style) {
-      style.remove();
-    }
-  }
-};
-
-// Global assignment with clean namespace
+// Make it available globally for both Extension and Playwright
 if (typeof window !== 'undefined') {
   window.ProboLabs = {
     ElementTag,
-    highlight: highlighter
+    highlight
   };
 }
 
-// Export for module usage
-export const highlight = highlighter;
