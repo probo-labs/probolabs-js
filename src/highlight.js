@@ -103,17 +103,97 @@ function getElementInfo(element) {
 }
 
 // Private helper functions
-function uniquifyElements(elements) {
-  return Array.from(new Set(elements));
+function uniquifyElements(elements, shortestPrefix = false) {
+  // Helper to get xpath for an element
+  const getXPath = (el) => {
+    if (!el) return '';
+    if (el.id) return `//*[@id="${el.id}"]`;
+    
+    const path = [];
+    while (el && el.nodeType === Node.ELEMENT_NODE) {
+      let selector = el.nodeName.toLowerCase();
+      let sibling = el;
+      let siblingCount = 0;
+      
+      while (sibling = sibling.previousElementSibling) {
+        if (sibling.nodeName.toLowerCase() === selector) siblingCount++;
+      }
+      
+      if (siblingCount) {
+        selector += `[${siblingCount + 1}]`;
+      }
+      
+      path.unshift(selector);
+      el = el.parentNode;
+    }
+    
+    return '/' + path.join('/');
+  };
+
+  // Get all xpaths and their depths
+  const elementXPaths = elements.map(el => ({
+    element: el,
+    xpath: getXPath(el),
+    depth: getXPath(el).split('/').length
+  }));
+
+  if (shortestPrefix) {
+    // Sort by xpath depth to process shorter paths first
+    elementXPaths.sort((a, b) => a.depth - b.depth);
+    
+    const seen = new Set();
+    const uniqueElements = [];
+    
+    // Only add elements whose xpath isn't a prefix of any already seen xpath
+    for (const {element, xpath} of elementXPaths) {
+      if (!Array.from(seen).some(seenXPath => xpath.startsWith(seenXPath))) {
+        seen.add(xpath);
+        uniqueElements.push(element);
+      }
+    }
+    
+    return uniqueElements;
+  } else {
+    // Original behavior - just remove exact duplicates
+    const seen = new Set();
+    return elementXPaths
+      .filter(({xpath}) => {
+        if (!seen.has(xpath)) {
+          seen.add(xpath);
+          return true;
+        }
+        return false;
+      })
+      .map(({element}) => element);
+  }
 }
 
 function findDropdowns() {
   const dropdowns = [];
+  
+  // Native select elements
   dropdowns.push(...document.querySelectorAll('select'));
+  
+  // Elements with dropdown roles
   dropdowns.push(...document.querySelectorAll('[role="combobox"], [role="listbox"], [role="dropdown"]'));
-  dropdowns.push(...document.querySelectorAll('[class*="dropdown" i], [class*="select" i], [class*="combobox" i]'));
+  
+  // Common dropdown class patterns
+  const dropdownPattern = /dropdown|select|combobox/i;
+  const elements = document.querySelectorAll('*');
+  const dropdownClasses = Array.from(elements).filter(el => {
+    const hasDropdownClass = dropdownPattern.test(el.className);
+    const validTag = ['li', 'ul', 'span', 'div', 'p'].includes(el.tagName.toLowerCase());
+    return hasDropdownClass && validTag;
+  });
+  dropdowns.push(...dropdownClasses);
+  
+  // Elements with aria-haspopup attribute
   dropdowns.push(...document.querySelectorAll('[aria-haspopup="true"], [aria-haspopup="listbox"]'));
-  return uniquifyElements(dropdowns);
+
+  dropdowns.push(...document.querySelectorAll('nav ul li'));
+
+  // Use uniquifyElements with shortest prefix option
+  return uniquifyElements(dropdowns, true);
 }
 
 function findClickables() {
