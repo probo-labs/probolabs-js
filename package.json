@@ -2,10 +2,17 @@
   "name": "probolabs-js",
   "version": "0.1.1",
   "description": "DOM element highlighting utilities for testing and automation",
-  "main": "src/highlight.js",
+  "main": "dist/probolabs.umd.js",
+  "module": "dist/probolabs.esm.js",
   "files": [
+    "dist",
     "src"
   ],
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w",
+    "prepare": "npm run build"
+  },
   "keywords": [
     "dom",
     "highlight",
@@ -19,5 +26,11 @@
     "url": "https://github.com/probolabs/probolabs-js"
   },
   "author": "Probolabs",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^2.79.2",
+    "rollup-plugin-terser": "^7.0.2"
+  }
 }

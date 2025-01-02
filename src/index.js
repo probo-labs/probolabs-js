@@ -1,0 +1,1 @@
+export { ElementTag, highlight } from './highlight.js';

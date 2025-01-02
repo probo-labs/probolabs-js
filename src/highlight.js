@@ -344,6 +344,7 @@ async function findElements(elementTypes) {
 }
 
 function highlightElements(elements) {
+  console.log('🔍 Highlighting elements CHANGED');
   // Remove any existing overlay
   const existingOverlay = document.getElementById('highlight-overlay');
   if (existingOverlay) existingOverlay.remove();
