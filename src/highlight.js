@@ -8,7 +8,7 @@ export const ElementTag = {
   BUTTON: 'BUTTON',
   LINK: 'LINK',
   TOGGLE_SWITCH: 'TOGGLE_SWITCH',
-  NON_INTERACTIVE_LEAF: 'NON_INTERACTIVE_LEAF'
+  NON_INTERACTIVE_ELEMENT: 'NON_INTERACTIVE_ELEMENT'
 };
 
 export const highlight = {
@@ -33,7 +33,7 @@ export const highlight = {
 };
 
 // Helper function that's also useful publicly
-function getElementInfo(element) {
+function getElementInfo(element, index) {
   // Get CSS selector
   const getCssPath = (el) => {
     const path = [];
@@ -87,12 +87,16 @@ function getElementInfo(element) {
   const rect = element.getBoundingClientRect();
   
   return {
-    tag: element.tagName.toLowerCase(),
+    // Required fields (matching Python model)
+    index: index.toString(),
     html: element.outerHTML,
+    xpath: getXPath(element),
     text: element.textContent?.trim() || '',
+    
+    // Optional fields
+    tag: element.tagName.toLowerCase(),
     type: element.getAttribute('type') || '',
     css_selector: getCssPath(element),
-    xpath: getXPath(element),
     bounding_box: {
       x: rect.x,
       y: rect.y,
@@ -275,14 +279,22 @@ function findToggles() {
   return uniquifyElements(toggles);
 }
 
-function findNonInteractiveTextAndImageLeafs() {
-  const all = Array.from(document.querySelectorAll('p, span, div, img'));
-  const leaves = all.filter(element => !element.firstElementChild);
-
-  // Exclude interactive tags
-  return leaves.filter(el => {
-    const tag = el.tagName.toLowerCase();
-    return !['input','select','button','a','textarea'].includes(tag);
+function findNonInteractiveElements() {
+  // Get all elements in the document
+  const all = Array.from(document.querySelectorAll('*'));
+  
+  // Filter elements based on Python implementation rules
+  return all.filter(element => {
+    // Check if element is a leaf node (no children)
+    if (!element.firstElementChild) {
+      const tag = element.tagName.toLowerCase();
+      // Check if element is not interactive (matching Python exclusions)
+      if (!['select', 'button', 'a'].includes(tag)) {
+        // Check if element is a text or image element (matching Python inclusions)
+        return ['p', 'span', 'div', 'input', 'textarea'].includes(tag);
+      }
+    }
+    return false;
   });
 }
 
@@ -315,20 +327,24 @@ async function findElements(elementTypes) {
     if (elementType === ElementTag.TOGGLE_SWITCH) {
       elements.push(...findToggles());
     }
-    if (elementType === ElementTag.NON_INTERACTIVE_LEAF) {
-      elements.push(...findNonInteractiveTextAndImageLeafs());
+    if (elementType === ElementTag.NON_INTERACTIVE_ELEMENT) {
+      elements.push(...findNonInteractiveElements());
     }
   });
 
   const uniqueElements = uniquifyElements(elements);
   
-  // Log detailed info for each element
-  console.log(`Found ${uniqueElements.length} elements:`);
-  uniqueElements.forEach((element, index) => {
-    console.log(`Element ${index + 1}:`, getElementInfo(element));
+  // Add index to each element's info
+  const elementsWithInfo = uniqueElements.map((element, index) => 
+    getElementInfo(element, index)
+  );
+  
+  console.log(`Found ${elementsWithInfo.length} elements:`);
+  elementsWithInfo.forEach(info => {
+    console.log(`Element ${info.index}:`, info);
   });
 
-  return uniqueElements;
+  return elementsWithInfo;
 }
 
 function highlightElements(elements) {
@@ -344,9 +360,21 @@ function highlightElements(elements) {
     document.head.appendChild(style);
   }
 
-  elements.forEach(element => {
-    element.querySelectorAll('svg').forEach(svg => svg.remove());
-    element.classList.add('extension-highlighted');
+  // Use xpath to find and highlight the actual elements
+  elements.forEach(elementInfo => {
+    const element = document.evaluate(
+      elementInfo.xpath, 
+      document, 
+      null, 
+      XPathResult.FIRST_ORDERED_NODE_TYPE, 
+      null
+    ).singleNodeValue;
+
+    if (element) {
+      // Remove SVGs if they exist
+      element.querySelectorAll('svg').forEach(svg => svg.remove());
+      element.classList.add('extension-highlighted');
+    }
   });
 }
 
