@@ -19,13 +19,9 @@ export const highlight = {
   },
 
   unexecute: function() {
-    document.querySelectorAll('.extension-highlighted').forEach(element => {
-      element.classList.remove('extension-highlighted');
-    });
-
-    const style = document.getElementById('highlight-styles');
-    if (style) {
-      style.remove();
+    const overlay = document.getElementById('highlight-overlay');
+    if (overlay) {
+      overlay.remove();
     }
   },
 
@@ -348,34 +344,86 @@ async function findElements(elementTypes) {
 }
 
 function highlightElements(elements) {
-  if (!document.getElementById('highlight-styles')) {
-    const style = document.createElement('style');
-    style.id = 'highlight-styles';
-    style.textContent = `
-      .extension-highlighted {
-        border: 2px solid red !important;
-        transition: all 0.2s ease-in-out;
-      }
-    `;
-    document.head.appendChild(style);
-  }
+  // Remove any existing overlay
+  const existingOverlay = document.getElementById('highlight-overlay');
+  if (existingOverlay) existingOverlay.remove();
 
-  // Use xpath to find and highlight the actual elements
-  elements.forEach(elementInfo => {
-    const element = document.evaluate(
-      elementInfo.xpath, 
+  // Create overlay container
+  const overlay = document.createElement('div');
+  overlay.id = 'highlight-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10000;
+  `;
+  document.body.appendChild(overlay);
+
+  // Function to get element by XPath
+  const getElementByXPath = (xpath) => {
+    return document.evaluate(
+      xpath, 
       document, 
       null, 
       XPathResult.FIRST_ORDERED_NODE_TYPE, 
       null
     ).singleNodeValue;
+  };
 
-    if (element) {
-      // Remove SVGs if they exist
-      element.querySelectorAll('svg').forEach(svg => svg.remove());
-      element.classList.add('extension-highlighted');
-    }
-  });
+  // Function to update highlight positions
+  const updateHighlights = () => {
+    // Clear existing highlights
+    overlay.innerHTML = '';
+    
+    // Create new highlights based on current element positions
+    elements.forEach(elementInfo => {
+      const element = getElementByXPath(elementInfo.xpath);
+      if (!element) return; // Skip if element not found
+
+      const rect = element.getBoundingClientRect();
+      const highlight = document.createElement('div');
+      highlight.style.cssText = `
+        position: fixed;
+        left: ${rect.x}px;
+        top: ${rect.y}px;
+        width: ${rect.width}px;
+        height: ${rect.height}px;
+        background-color: rgba(255, 0, 0, 0.2);
+        border: 2px solid rgba(255, 0, 0, 0.8);
+        border-radius: 3px;
+        transition: all 0.2s ease-in-out;
+      `;
+      overlay.appendChild(highlight);
+    });
+  };
+
+  // Initial highlight
+  updateHighlights();
+
+  // Update highlights on scroll and resize
+  const scrollHandler = () => {
+    requestAnimationFrame(updateHighlights);
+  };
+  
+  window.addEventListener('scroll', scrollHandler, true);
+  window.addEventListener('resize', updateHighlights);
+
+  // Store event handlers for cleanup
+  overlay.scrollHandler = scrollHandler;
+  overlay.updateHighlights = updateHighlights;
+}
+
+function unexecute() {
+  const overlay = document.getElementById('highlight-overlay');
+  if (overlay) {
+    // Remove event listeners
+    window.removeEventListener('scroll', overlay.scrollHandler, true);
+    window.removeEventListener('resize', overlay.updateHighlights);
+    overlay.remove();
+  }
 }
 
 // Make it available globally for both Extension and Playwright
