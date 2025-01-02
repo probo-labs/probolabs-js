@@ -375,15 +375,15 @@ function highlightElements(elements) {
 
   // Function to update highlight positions
   const updateHighlights = () => {
-    // Clear existing highlights
     overlay.innerHTML = '';
     
-    // Create new highlights based on current element positions
     elements.forEach(elementInfo => {
       const element = getElementByXPath(elementInfo.xpath);
-      if (!element) return; // Skip if element not found
+      if (!element) return;
 
       const rect = element.getBoundingClientRect();
+      
+      // Create border highlight (red rectangle)
       const highlight = document.createElement('div');
       highlight.style.cssText = `
         position: fixed;
@@ -391,11 +391,34 @@ function highlightElements(elements) {
         top: ${rect.y}px;
         width: ${rect.width}px;
         height: ${rect.height}px;
-        background-color: rgba(255, 0, 0, 0.2);
-        border: 2px solid rgba(255, 0, 0, 0.8);
-        border-radius: 3px;
+        border: 1px solid rgb(255, 0, 0);
         transition: all 0.2s ease-in-out;
       `;
+
+      // Create index label container - now positioned to the right and slightly up
+      const labelContainer = document.createElement('div');
+      labelContainer.style.cssText = `
+        position: absolute;
+        right: -4px;     /* Offset to the right */
+        top: -4px;       /* Offset upwards */
+        padding: 4px;
+        background-color: rgb(255, 255, 0);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      `;
+
+      const text = document.createElement('span');
+      text.style.cssText = `
+        color: rgb(0, 0, 0);
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        line-height: 1;
+      `;
+      text.textContent = elementInfo.index;
+      
+      labelContainer.appendChild(text);
+      highlight.appendChild(labelContainer);
       overlay.appendChild(highlight);
     });
   };
