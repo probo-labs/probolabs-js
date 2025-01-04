@@ -16,7 +16,7 @@ export default [
     },
     // ES Module for Chrome Extension
     {
-        input: 'src/highlight.js',
+        input: 'src/index.js',
         output: {
             file: 'dist/probolabs.esm.js',
             format: 'es',
