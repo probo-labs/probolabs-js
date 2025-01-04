@@ -71,16 +71,31 @@ export function getElementInfo(element, index) {
 }
 
 export function uniquifyElements(elements) {
+  const elementInfos = elements.map(element => ({
+    element,
+    info: getElementInfo(element, 0)
+  }));
+
   const seen = new Set();
-  return elements.filter(element => {
-    // Get the xpath directly from the element using the same getXPath function
-    const xpath = getElementInfo(element, 0).xpath;
-    if (!seen.has(xpath)) {
-      seen.add(xpath);
-      return true;
+  
+  return elementInfos.filter(({element, info}) => {
+    // Skip nested clickable elements (e.g. <li><a>text</a></li>)
+    // We want to keep the parent element in these cases
+    const parent = element.parentElement;
+    if (parent && parent.contains(element) && 
+        ['a', 'button'].includes(info.tag) && 
+        parent.textContent.trim() === element.textContent.trim()) {
+      return false;
     }
-    return false;
-  });
+
+    // Use xpath as unique identifier
+    if (seen.has(info.xpath)) {
+      return false;
+    }
+
+    seen.add(info.xpath);
+    return true;
+  }).map(({element}) => element);
 }
 
 export function filterClickableElements(elements) {
