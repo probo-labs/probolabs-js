@@ -63,26 +63,23 @@ export async function findElements(elementTypes) {
     }
   });
 
-  console.log('Before uniquify:', elements.length);
-  //const uniqueElements = uniquifyElements(elements);
-  const uniqueElements = elements;
-  console.log('After uniquify:', uniqueElements.length);
-  
-  const elementsWithInfo = uniqueElements.map((element, index) => 
+  // console.log('Before uniquify:', elements.length);
+  const elementsWithInfo = elements.map((element, index) => 
     getElementInfo(element, index)
   );
   
-  console.log(`Found ${elementsWithInfo.length} elements:`);
-  elementsWithInfo.forEach(info => {
+  const uniqueElements = uniquifyElements(elementsWithInfo);
+  console.log(`Found ${uniqueElements.length} elements:`);
+  uniqueElements.forEach(info => {
     console.log(`Element ${info.index}:`, info);
   });
-  // TBD - filter out elements that are not visible or not enabled
-  return elementsWithInfo;
+  
+  return uniqueElements;
 }
 
 // elements is an array of objects with index, xpath
 export function highlightElements(elements) {
-  console.log('Starting highlight for elements:', elements);
+  // console.log('Starting highlight for elements:', elements);
   
   // Create overlay if it doesn't exist
   let overlay = document.getElementById('highlight-overlay');
@@ -124,7 +121,7 @@ export function highlightElements(elements) {
       if (!element) return;
 
       const rect = element.getBoundingClientRect();
-      console.log('Element rect:', elementInfo.tag, rect);
+      // console.log('Element rect:', elementInfo.tag, rect);
       
       if (rect.width === 0 || rect.height === 0) {
         console.warn('Element has zero dimensions:', elementInfo);
