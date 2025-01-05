@@ -134,7 +134,15 @@ export function uniquifyElements(elements) {
   
   // First pass - collect all elements as before
   elements.forEach(element => {
-    if (!hasSeenParent(seen, element.xpath) || shouldKeepNestedElement(element.element)) {
+    // console.log('Processing:', {
+    //   index: element.index,
+    //   xpath: element.xpath
+    // });
+    const shouldKeep = shouldKeepNestedElement(element.element);
+    const seenParent = hasSeenParent(seen, element.xpath);
+    // console.log('shouldKeep:', shouldKeep);
+    // console.log('seenParent:', seenParent);
+    if (!seenParent || shouldKeep) {
       seen.add(element.xpath);
       result.push(element);
     }
@@ -161,7 +169,7 @@ export function uniquifyElements(elements) {
         other.tag === 'a'
       );
     });
-    
+    // console.log('overlapping:', overlapping);
     // Keep this element if:
     // 1. No overlapping element found, or
     // 2. This is the 'a' tag (and not the li)
