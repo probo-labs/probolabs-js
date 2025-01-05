@@ -1,4 +1,5 @@
 import { uniquifyElements } from './utils';
+
 export function findDropdowns() {
   const dropdowns = [];
   
@@ -64,46 +65,50 @@ export function findToggles() {
   const toggles = [];
   const checkboxes = document.querySelectorAll('input[type="checkbox"]');
   const togglePattern = /switch|toggle|slider/i;
-  
+
   checkboxes.forEach(checkbox => {
     let isToggle = false;
-    
-    // 1. Check the checkbox's own class and role
+
+    // Check the checkbox itself
     if (togglePattern.test(checkbox.className) || togglePattern.test(checkbox.getAttribute('role') || '')) {
       isToggle = true;
     }
-    
-    // 2. Check up to 3 parent levels
+
+    // Check parent elements (up to 3 levels)
     if (!isToggle) {
-      let current = checkbox;
+      let element = checkbox;
       for (let i = 0; i < 3; i++) {
-        const parent = current.parentElement;
+        const parent = element.parentElement;
         if (!parent) break;
-        const parentClasses = parent.className || '';
-        const parentRole = parent.getAttribute('role') || '';
-        if (togglePattern.test(parentClasses) || togglePattern.test(parentRole)) {
+
+        const className = parent.className || '';
+        const role = parent.getAttribute('role') || '';
+
+        if (togglePattern.test(className) || togglePattern.test(role)) {
           isToggle = true;
           break;
         }
-        current = parent;
+        element = parent;
       }
     }
-    
-    // 3. Check next sibling
+
+    // Check next sibling
     if (!isToggle) {
-      const sibling = checkbox.nextElementSibling;
-      if (sibling) {
-        const siblingClasses = sibling.className || '';
-        const siblingRole = sibling.getAttribute('role') || '';
-        if (togglePattern.test(siblingClasses) || togglePattern.test(siblingRole)) {
+      const nextSibling = checkbox.nextElementSibling;
+      if (nextSibling) {
+        const className = nextSibling.className || '';
+        const role = nextSibling.getAttribute('role') || '';
+        if (togglePattern.test(className) || togglePattern.test(role)) {
           isToggle = true;
         }
       }
     }
-    
-    if (isToggle) toggles.push(checkbox);
+
+    if (isToggle) {
+      toggles.push(checkbox);
+    }
   });
-  
+
   return toggles;
 }
 
@@ -113,12 +118,9 @@ export function findNonInteractiveElements() {
   
   // Filter elements based on Python implementation rules
   return all.filter(element => {
-    // Check if element is a leaf node (no children)
     if (!element.firstElementChild) {
       const tag = element.tagName.toLowerCase();
-      // Check if element is not interactive (matching Python exclusions)
       if (!['select', 'button', 'a'].includes(tag)) {
-        // Check if element is a text or image element (matching Python inclusions)
         return ['p', 'span', 'div', 'input', 'textarea'].includes(tag);
       }
     }

@@ -134,23 +134,16 @@ export function uniquifyElements(elements) {
   
   // First pass - collect all elements as before
   elements.forEach(element => {
-    // console.log('Processing:', {
-    //   index: element.index,
-    //   xpath: element.xpath
-    // });
-    const shouldKeep = shouldKeepNestedElement(element.element);
-    const seenParent = hasSeenParent(seen, element.xpath);
-    // console.log('shouldKeep:', shouldKeep);
-    // console.log('seenParent:', seenParent);
-    if (!seenParent || shouldKeep) {
+    if (seen.has(element.xpath)) return;
+    
+    if (!hasSeenParent(seen, element.xpath) || shouldKeepNestedElement(element.element)) {
       seen.add(element.xpath);
       result.push(element);
     }
   });
   
   // Second pass - remove elements that share the same space
-  return result.filter((element, index) => {
-    // Look for other elements that might be overlapping
+  const filteredResults = result.filter((element, index) => {
     const overlapping = result.find((other, otherIndex) => {
       if (index === otherIndex) return false;
       
@@ -158,21 +151,21 @@ export function uniquifyElements(elements) {
       const box2 = other.bounding_box;
       
       return (
-        // Same dimensions and position
         box1.x === box2.x &&
         box1.y === box2.y &&
         box1.width === box2.width &&
         box1.height === box2.height &&
-        // Same text content
         element.text === other.text &&
-        // Prefer 'a' tags over other elements
         other.tag === 'a'
       );
     });
-    // console.log('overlapping:', overlapping);
-    // Keep this element if:
-    // 1. No overlapping element found, or
-    // 2. This is the 'a' tag (and not the li)
+    
     return !overlapping || element.tag === 'a';
   });
+  
+  // Final pass - reindex elements from 0
+  return filteredResults.map((element, index) => ({
+    ...element,
+    index: index.toString()
+  }));
 }

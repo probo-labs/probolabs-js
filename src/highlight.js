@@ -157,7 +157,7 @@ export function highlightElements(elements) {
       text.style.cssText = `
         color: rgb(0, 0, 0);
         font-family: Arial, sans-serif;
-        font-size: 12px;
+        font-size: 10px;
         line-height: 1;
       `;
       text.textContent = elementInfo.index;
