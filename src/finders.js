@@ -24,41 +24,40 @@ export function findDropdowns() {
 
   dropdowns.push(...document.querySelectorAll('nav ul li'));
 
-  // Use uniquifyElements WITHOUT the shortestPrefix parameter
-  return uniquifyElements(dropdowns);
+  return dropdowns;
 }
 
 export function findClickables() {
   const clickables = [];
   
-  // <a> tags with href
-  clickables.push(...document.querySelectorAll('a[href]'));
+  // Collect all clickable elements first
+  const links = [...document.querySelectorAll('a[href]')];
+  const buttons = [...document.querySelectorAll('button')];
+  const inputButtons = [...document.querySelectorAll('input[type="button"], input[type="submit"], input[type="reset"]')];
+  const roleButtons = [...document.querySelectorAll('[role="button"]')];
+  const tabbable = [...document.querySelectorAll('[tabindex="0"]')];
+  const clickHandlers = [...document.querySelectorAll('[onclick]')];
+  const dropdowns = findDropdowns();
+  const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
+  const radios = [...document.querySelectorAll('input[type="radio"]')];
+  const toggles = findToggles();
   
-  // <button> elements
-  clickables.push(...document.querySelectorAll('button'));
-  
-  // input[type="button"], input[type="submit"], etc.
-  clickables.push(...document.querySelectorAll('input[type="button"], input[type="submit"], input[type="reset"]'));
-  
-  // Elements with role="button"
-  clickables.push(...document.querySelectorAll('[role="button"]'));
-  
-  // Elements with tabindex="0"
-  clickables.push(...document.querySelectorAll('[tabindex="0"]'));
-  
-  // Elements with onclick handlers
-  clickables.push(...document.querySelectorAll('[onclick]'));
-  
-  // Also include dropdowns but without the aggressive filtering
-  clickables.push(...findDropdowns());
-  
-  // Table rows that have role='row' + 'clickable' in class
-  const clickableRows = Array.from(document.querySelectorAll('[role="row"]'))
-    .filter(el => /clickable/i.test(el.className));
-  clickables.push(...clickableRows);
-  
-  // Use regular uniquifyElements without prefix filtering
-  return uniquifyElements(clickables);
+  // Add all elements at once
+  clickables.push(
+    ...links,
+    ...buttons,
+    ...inputButtons,
+    ...roleButtons,
+    ...tabbable,
+    ...clickHandlers,
+    ...dropdowns,
+    ...checkboxes,
+    ...radios,
+    ...toggles
+  );
+
+  // Only uniquify once at the end
+  return clickables;  // Let findElements handle the uniquification
 }
 
 export function findToggles() {
@@ -105,7 +104,7 @@ export function findToggles() {
     if (isToggle) toggles.push(checkbox);
   });
   
-  return uniquifyElements(toggles);
+  return toggles;
 }
 
 export function findNonInteractiveElements() {

@@ -1,4 +1,3 @@
-
 import { ElementTag } from './constants';
 import { findDropdowns, findClickables, findToggles, findNonInteractiveElements } from './finders';
 import { uniquifyElements, getElementInfo } from './utils';
@@ -38,9 +37,17 @@ export async function findElements(elementTypes) {
   const elements = [];
   typesArray.forEach(elementType => {
     if (elementType === ElementTag.FILLABLE) {
-      elements.push(...document.querySelectorAll('input:not([type="radio"]):not([type="checkbox"])'));
-      elements.push(...document.querySelectorAll('textarea'));
-      elements.push(...document.querySelectorAll('[contenteditable="true"]'));
+      const inputs = [...document.querySelectorAll('input:not([type="radio"]):not([type="checkbox"])')];
+      console.log('Found inputs:', inputs.length, inputs);
+      elements.push(...inputs);
+      
+      const textareas = [...document.querySelectorAll('textarea')];
+      console.log('Found textareas:', textareas.length);
+      elements.push(...textareas);
+      
+      const editables = [...document.querySelectorAll('[contenteditable="true"]')];
+      console.log('Found editables:', editables.length);
+      elements.push(...editables);
     }
     if (elementType === ElementTag.SELECTABLE) {
       elements.push(...findDropdowns());
@@ -56,9 +63,11 @@ export async function findElements(elementTypes) {
     }
   });
 
-  const uniqueElements = uniquifyElements(elements);
+  console.log('Before uniquify:', elements.length);
+  //const uniqueElements = uniquifyElements(elements);
+  const uniqueElements = elements;
+  console.log('After uniquify:', uniqueElements.length);
   
-  // Add index to each element's info
   const elementsWithInfo = uniqueElements.map((element, index) => 
     getElementInfo(element, index)
   );
@@ -73,37 +82,40 @@ export async function findElements(elementTypes) {
 
 // elements is an array of objects with index, xpath
 export function highlightElements(elements) {
-  console.log('🔍 Highlighting elements:', elements);
-  // Remove any existing overlay
-  const existingOverlay = document.getElementById('highlight-overlay');
-  if (existingOverlay) existingOverlay.remove();
-
-  // Create overlay container
-  const overlay = document.createElement('div');
-  overlay.id = 'highlight-overlay';
-  overlay.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 10000;
-  `;
-  document.body.appendChild(overlay);
-
-  // Function to get element by XPath
+  console.log('Starting highlight for elements:', elements);
+  
+  // Create overlay if it doesn't exist
+  let overlay = document.getElementById('highlight-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'highlight-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10000;
+    `;
+    document.body.appendChild(overlay);
+  }
+  
   const getElementByXPath = (xpath) => {
-    return document.evaluate(
+    const element = document.evaluate(
       xpath, 
       document, 
       null, 
       XPathResult.FIRST_ORDERED_NODE_TYPE, 
       null
     ).singleNodeValue;
+    
+    if (!element) {
+      console.warn('Failed to find element with xpath:', xpath);
+    }
+    return element;
   };
 
-  // Function to update highlight positions
   const updateHighlights = () => {
     overlay.innerHTML = '';
     
@@ -112,6 +124,12 @@ export function highlightElements(elements) {
       if (!element) return;
 
       const rect = element.getBoundingClientRect();
+      console.log('Element rect:', elementInfo.tag, rect);
+      
+      if (rect.width === 0 || rect.height === 0) {
+        console.warn('Element has zero dimensions:', elementInfo);
+        return;
+      }
       
       // Create border highlight (red rectangle)
       const highlight = document.createElement('div');

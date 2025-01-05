@@ -1,3 +1,33 @@
+export function generateXPath(element) {
+  if (!element) return '';
+  
+  // If element has an id, use that (it's unique and shorter)
+  if (element.id) {
+    return `//*[@id="${element.id}"]`;
+  }
+  
+  const parts = [];
+  let current = element;
+  
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    let index = 1;
+    let sibling = current.previousSibling;
+    
+    while (sibling) {
+      if (sibling.nodeType === Node.ELEMENT_NODE && sibling.tagName === current.tagName) {
+        index++;
+      }
+      sibling = sibling.previousSibling;
+    }
+    
+    const tagName = current.tagName.toLowerCase();
+    parts.unshift(`${tagName}[${index}]`);
+    current = current.parentNode;
+  }
+  
+  return '/' + parts.join('/');
+}
+
 export function getElementInfo(element, index) {
   // Get CSS selector
   const getCssPath = (el) => {
@@ -22,32 +52,6 @@ export function getElementInfo(element, index) {
     return path.join(' > ');
   };
 
-  // Get XPath
-  const getXPath = (el) => {
-    if (!el) return '';
-    if (el.id) return `//*[@id="${el.id}"]`;
-    
-    const path = [];
-    while (el && el.nodeType === Node.ELEMENT_NODE) {
-      let selector = el.nodeName.toLowerCase();
-      let sibling = el;
-      let siblingCount = 0;
-      
-      while (sibling = sibling.previousElementSibling) {
-        if (sibling.nodeName.toLowerCase() === selector) siblingCount++;
-      }
-      
-      if (siblingCount) {
-        selector += `[${siblingCount + 1}]`;
-      }
-      
-      path.unshift(selector);
-      el = el.parentNode;
-    }
-    
-    return '/' + path.join('/');
-  };
-
   // Get bounding box
   const rect = element.getBoundingClientRect();
   const boundingBox = {
@@ -64,7 +68,7 @@ export function getElementInfo(element, index) {
     type: element.type || '',
     text: element.textContent.trim(),
     html: element.outerHTML,
-    xpath: getXPath(element),
+    xpath: generateXPath(element),
     css_selector: getCssPath(element),
     bounding_box: boundingBox
   };
@@ -78,76 +82,45 @@ export function uniquifyElements(elements) {
 
   const seen = new Set();
   
+  // Add debug logging
+  console.log('Uniquifying elements:');
+  elementInfos.forEach(({element, info}) => {
+    console.log(`- ${info.tag} (${info.type}): xpath=${info.xpath}, text="${info.text}"`);
+  });
+  
   return elementInfos.filter(({element, info}) => {
-    // Skip nested clickable elements (e.g. <li><a>text</a></li>)
-    // We want to keep the parent element in these cases
-    const parent = element.parentElement;
-    if (parent && parent.contains(element) && 
-        ['a', 'button'].includes(info.tag) && 
-        parent.textContent.trim() === element.textContent.trim()) {
+    // Skip if we've seen this xpath
+    if (seen.has(info.xpath)) {
+      console.log(`Skipping duplicate xpath: ${info.xpath}`);
       return false;
     }
 
-    // Use xpath as unique identifier
-    if (seen.has(info.xpath)) {
-      return false;
+    // For interactive elements, don't check text content
+    const isInteractiveElement = ['input', 'select', 'textarea', 'button'].includes(info.tag);
+    if (!isInteractiveElement) {
+      // Check if this element's text is contained within a parent's text
+      let parent = element.parentElement;
+      while (parent) {
+        // Skip if parent has same text content (indicates nesting)
+        if (parent.textContent.trim() === element.textContent.trim()) {
+          console.log(`Skipping nested text: ${info.xpath} (${info.text})`);
+          return false;
+        }
+        
+        // Check if parent is already selected
+        const parentXPath = generateXPath(parent);
+        if (seen.has(parentXPath)) {
+          console.log(`Skipping child of seen parent: ${info.xpath}`);
+          return false;
+        }
+        
+        parent = parent.parentElement;
+      }
     }
 
     seen.add(info.xpath);
     return true;
   }).map(({element}) => element);
-}
-
-export function filterClickableElements(elements) {
-  return elements.filter(element => {
-    const tag = element.tag.toLowerCase();
-    
-    // Common clickable elements
-    if (['a', 'button', 'input', 'select', 'textarea'].includes(tag)) {
-      return true;
-    }
-    
-    // Elements with click-related attributes
-    if (element.html.match(/onclick|role="button"|role="link"|tabindex|cursor:\s*pointer/)) {
-      return true;
-    }
-    
-    // Elements that look like buttons/links based on classes
-    if (element.html.match(/class="[^"]*\b(btn|button|link)\b/)) {
-      return true;
-    }
-    
-    return false;
-  });
-}
-
-export function filterFormElements(elements) {
-  return elements.filter(element => {
-    const tag = element.tag.toLowerCase();
-    return ['input', 'select', 'textarea'].includes(tag);
-  });
-}
-
-export function filterTextElements(elements) {
-  return elements.filter(element => {
-    // Skip elements with no text content
-    if (!element.text) {
-      return false;
-    }
-    
-    // Skip form elements
-    const tag = element.tag.toLowerCase();
-    if (['input', 'select', 'textarea'].includes(tag)) {
-      return false;
-    }
-    
-    // Skip elements with only whitespace/special characters
-    if (!element.text.match(/[a-zA-Z0-9]/)) {
-      return false;
-    }
-    
-    return true;
-  });
 }
 
 export function removeDuplicateXPaths(elements) {
