@@ -115,48 +115,56 @@ function shouldKeepNestedElement(element) {
   return false;
 }
 
+function hasSeenParent(seen, xpath) {
+  // Check if we've seen any parent of this element
+  for (const seenPath of seen) {
+    if (xpath.startsWith(seenPath) && xpath !== seenPath) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function uniquifyElements(elements) {
-  // console.log('uniquifyElements input:', elements);
-  // console.log('First element structure:', elements[0] ? JSON.stringify(elements[0], null, 2) : 'No elements');
-  
   const seen = new Set();
   const result = [];
   
-  // Sort by xpath length to process parents before children
-  try {
-    elements.sort((a, b) => {
-      // console.log('Comparing elements:', {
-      //   a: a?.xpath,
-      //   b: b?.xpath
-      // });
-      return a.xpath.length - b.xpath.length;
-    });
-  } catch (error) {
-    console.error('Sort error:', error);
-    console.error('Problem elements:', elements.filter(e => !e?.xpath));
-  }
-
+  // First sort by xpath length to process parents before children
+  elements.sort((a, b) => a.xpath.length - b.xpath.length);
+  
+  // First pass - collect all elements as before
   elements.forEach(element => {
-    // Skip if exact duplicate
-    if (seen.has(element.xpath)) {
-      // console.log('Skipping duplicate xpath:', element.xpath);
-      return;
-    }
-
-    // Check if this element has a parent that we've already seen
-    const hasSeenParent = Array.from(seen).some(seenXpath => 
-      element.xpath.startsWith(seenXpath)
-    );
-
-    if (!hasSeenParent || shouldKeepNestedElement(element.element)) {
+    if (!hasSeenParent(seen, element.xpath) || shouldKeepNestedElement(element.element)) {
       seen.add(element.xpath);
       result.push(element);
-      // console.log('Keeping element:', element.xpath);
-    } else {
-      // console.log('Skipping nested element:', element.xpath);
     }
   });
   
-  // console.log('uniquifyElements output:', result);
-  return result;
+  // Second pass - remove elements that share the same space
+  return result.filter((element, index) => {
+    // Look for other elements that might be overlapping
+    const overlapping = result.find((other, otherIndex) => {
+      if (index === otherIndex) return false;
+      
+      const box1 = element.bounding_box;
+      const box2 = other.bounding_box;
+      
+      return (
+        // Same dimensions and position
+        box1.x === box2.x &&
+        box1.y === box2.y &&
+        box1.width === box2.width &&
+        box1.height === box2.height &&
+        // Same text content
+        element.text === other.text &&
+        // Prefer 'a' tags over other elements
+        other.tag === 'a'
+      );
+    });
+    
+    // Keep this element if:
+    // 1. No overlapping element found, or
+    // 2. This is the 'a' tag (and not the li)
+    return !overlapping || element.tag === 'a';
+  });
 }
