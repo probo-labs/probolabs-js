@@ -144,10 +144,10 @@ export function highlightElements(elements) {
       const labelContainer = document.createElement('div');
       labelContainer.style.cssText = `
         position: absolute;
-        right: -4px;     /* Offset to the right */
-        top: -4px;       /* Offset upwards */
+        right: -10px;     /* Offset to the right */
+        top: -5px;       /* Offset upwards */
         padding: 4px;
-        background-color: rgb(255, 255, 0);
+        background-color: rgba(255, 255, 0, 0.6);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -155,7 +155,7 @@ export function highlightElements(elements) {
 
       const text = document.createElement('span');
       text.style.cssText = `
-        color: rgb(0, 0, 0);
+        color: rgb(0, 0, 0, 0.8);
         font-family: Arial, sans-serif;
         font-size: 10px;
         line-height: 1;

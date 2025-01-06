@@ -117,20 +117,18 @@ export function uniquifyElements(elements) {
 
   // Final overlap filtering
   const filteredResults = filteredByParent.filter(element => {
-    const overlapping = filteredByParent.some(other => {
-      if (element === other) return false; // Skip self
-      const isOverlapping = areElementsOverlapping(element, other);
-
-      if (isOverlapping) {
-        console.debug('Found overlapping elements:', {
-          element1: { tag: element.tag, xpath: element.xpath, text: element.text },
-          element2: { tag: other.tag, xpath: other.xpath, text: other.text }
-        });
+    // Look for any element that came BEFORE this one in the array
+    const hasEarlierOverlap = filteredByParent.some(other => {
+      // Only check elements that came before (lower index)
+      if (filteredByParent.indexOf(other) >= filteredByParent.indexOf(element)) {
+        return false;
       }
-      return isOverlapping;
+      
+      return areElementsOverlapping(element, other);
     });
-    
-    return !overlapping || element.tag === 'a';
+
+    // Keep element if it has no earlier overlapping elements
+    return !hasEarlierOverlap;
   });
   
   console.log(`Final elements after filtering: ${filteredResults.length} (${filteredByParent.length - filteredResults.length} removed by overlap)`);
@@ -144,15 +142,19 @@ export function uniquifyElements(elements) {
 
 
 const areElementsOverlapping = (element1, element2) => {
+  if (element1.xpath === element2.xpath) {
+    return true;
+  }
+  
   const box1 = element1.bounding_box;
   const box2 = element2.bounding_box;
   
   return box1.x === box2.x &&
          box1.y === box2.y &&
          box1.width === box2.width &&
-         box1.height === box2.height &&
-         element1.text === element2.text &&
-         element2.tag === 'a';
+         box1.height === box2.height;
+        //  element1.text === element2.text &&
+        //  element2.tag === 'a';
 };
 
 function findClosestParent(seen, xpath) {
@@ -190,8 +192,22 @@ const isDropdownItem = (elementInfo) => {
     /select[-_]?item/i,     // matches: select-item, selectitem, select_item  
   ];
 
-  return elementInfo.element.className && 
-         dropdownPatterns.some(pattern => 
-           pattern.test(elementInfo.element.className)
-         );
+  const rolePatterns = [
+    /menu[-_]?item/i,       // matches: menuitem, menu-item
+    /option/i,              // matches: option
+    /list[-_]?item/i,      // matches: listitem, list-item
+    /tree[-_]?item/i       // matches: treeitem, tree-item
+  ];
+
+  const hasMatchingClass = elementInfo.element.className && 
+                          dropdownPatterns.some(pattern => 
+                            pattern.test(elementInfo.element.className)
+                          );
+
+  const hasMatchingRole = elementInfo.element.getAttribute('role') && 
+                         rolePatterns.some(pattern => 
+                           pattern.test(elementInfo.element.getAttribute('role'))
+                         );
+
+  return hasMatchingClass || hasMatchingRole;
 };
