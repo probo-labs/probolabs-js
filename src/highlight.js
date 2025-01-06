@@ -145,7 +145,7 @@ export function highlightElements(elements) {
       labelContainer.style.cssText = `
         position: absolute;
         right: -10px;     /* Offset to the right */
-        top: -5px;       /* Offset upwards */
+        top: -10px;       /* Offset upwards */
         padding: 4px;
         background-color: rgba(255, 255, 0, 0.6);
         display: flex;

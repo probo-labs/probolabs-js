@@ -172,15 +172,35 @@ function findClosestParent(seen, xpath) {
   return null;
 }
 
-function shouldKeepNestedElement(elementInfo, parentElement) {
-  // Special handling for form controls (input, select, textarea, button)
+function shouldKeepNestedElement(elementInfo, parentXPath) {
   let result = false;
-  const isFormControl = /^(input|select|textarea|button)$/i.test(elementInfo.tag);
-  if (isFormControl || isDropdownItem(elementInfo)) {
+  
+  // If this is a checkbox/radio input
+  if (elementInfo.tag === 'input' && 
+      (elementInfo.type === 'checkbox' || elementInfo.type === 'radio')) {
+    
+    // Check if parent is a label by looking at the parent xpath's last segment
+    const parentSegments = parentXPath.split('/');
+    const isParentLabel = parentSegments[parentSegments.length - 1].startsWith('label[');
+    
+    // If parent is a label, don't keep the input (we'll keep the label instead)
+    if (isParentLabel) {
+      return false;
+    }
+  }
+  
+  // Keep all other form controls and dropdown items
+  if (isFormControl(elementInfo) || isDropdownItem(elementInfo)) {
     result = true;
   }
-  console.log(`shouldKeepNestedElement: ${elementInfo.tag} ${elementInfo.text} ${elementInfo.xpath} -> ${parentElement} -> ${result}`);
+  
+  console.log(`shouldKeepNestedElement: ${elementInfo.tag} ${elementInfo.text} ${elementInfo.xpath} -> ${parentXPath} -> ${result}`);
   return result;
+}
+
+// Helper function to check if element is a form control
+function isFormControl(elementInfo) {
+  return /^(input|select|textarea|button)$/i.test(elementInfo.tag);
 }
 
 const isDropdownItem = (elementInfo) => {
