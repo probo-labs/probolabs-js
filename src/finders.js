@@ -42,7 +42,7 @@ export function findClickables() {
   const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
   const radios = [...document.querySelectorAll('input[type="radio"]')];
   const toggles = findToggles();
-  
+  const pointerElements = findElementsWithPointer();
   // Add all elements at once
   clickables.push(
     ...links,
@@ -54,7 +54,8 @@ export function findClickables() {
     ...dropdowns,
     ...checkboxes,
     ...radios,
-    ...toggles
+    ...toggles,
+    ...pointerElements
   );
 
   // Only uniquify once at the end
@@ -126,4 +127,26 @@ export function findNonInteractiveElements() {
     }
     return false;
   });
+}
+
+export function findElementsWithPointer() {
+  const elements = [];
+  const allElements = document.querySelectorAll('*');
+  
+  console.log('Checking elements with pointer style...');
+  
+  allElements.forEach(element => {
+    // Skip SVG elements for now
+    if (element instanceof SVGElement) {
+      return;
+    }
+    
+    const style = window.getComputedStyle(element);
+    if (style.cursor === 'pointer') {
+      elements.push(element);
+    }
+  });
+  
+  console.log(`Found ${elements.length} elements with pointer cursor`);
+  return elements;
 }

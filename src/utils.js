@@ -1,4 +1,5 @@
 import { ElementInfo } from './constants';
+
 export function generateXPath(element) {
   if (!element) return '';
   
@@ -74,98 +75,123 @@ export function getElementInfo(element, index) {
   });
 }
 
-function shouldKeepNestedElement(element) {
-  // 1. ARIA roles (highest priority - framework agnostic)
-  const role = element.getAttribute('role');
-  if (role === 'menuitem') {
-    return true;
-  }
 
-  // 2. Common menu/dropdown patterns
-  if (element.matches([
-    // Generic dropdown patterns
-    '.dropdown > summary',
-    '.dropdown-menu > li > a',
-    '.dropdown-content li > a',
-    // Menu patterns
-    'ul.menu li > a',
-    '.menu-list li > a'
-  ].join(','))) {
-    return true;
-  }
 
-  // 3. Framework-specific classes
-  const className = element.className;
-  const keepClasses = [
-    'dropdown-item',    // Bootstrap
-    'menu-item',       // Generic
-    'dropdown-link'    // Generic
-  ];
+
+const filterZeroDimensions = (elementInfo) => {
+  const rect = elementInfo.bounding_box;
+  const hasSize = rect.width > 0 && rect.height > 0;
+  const style = window.getComputedStyle(elementInfo.element);
+  const isVisible = style.display !== 'none' && style.visibility !== 'hidden';
   
-  if (keepClasses.some(cls => className.includes(cls))) {
-    return true;
-  }
-
-  // 4. Parent context check
-  const parentMenu = element.closest('.dropdown, .menu, .dropdown-menu');
-  if (parentMenu && element.tagName.toLowerCase() === 'a') {
-    return true;
-  }
-
-  return false;
-}
-
-function hasSeenParent(seen, xpath) {
-  // Check if we've seen any parent of this element
-  for (const seenPath of seen) {
-    if (xpath.startsWith(seenPath) && xpath !== seenPath) {
-      return true;
+  if (!hasSize || !isVisible) {
+    if (elementInfo.element.isConnected) {
+      console.debug('Filtered out invisible/zero-size element:', {
+        tag: elementInfo.tag,
+        xpath: elementInfo.xpath,
+        hasSize,
+        isVisible,
+        dimensions: rect
+      });
     }
+    return false;
   }
-  return false;
-}
+  return true;
+};
 
 export function uniquifyElements(elements) {
   const seen = new Set();
-  const result = [];
-  
-  // First sort by xpath length to process parents before children
-  elements.sort((a, b) => a.xpath.length - b.xpath.length);
-  
-  // First pass - collect all elements as before
-  elements.forEach(element => {
-    if (seen.has(element.xpath)) return;
-    
-    if (!hasSeenParent(seen, element.xpath) || shouldKeepNestedElement(element.element)) {
-      seen.add(element.xpath);
-      result.push(element);
-    }
+  console.log(`Starting uniquification with ${elements.length} elements`);
+  // First filter out elements with zero dimensions
+  const nonZeroElements = elements.filter(filterZeroDimensions);
+  // sort by xpath length so parents are processed first
+  nonZeroElements.sort((a, b) => a.xpath.length - b.xpath.length);
+  console.log(`After dimension filtering: ${nonZeroElements.length} elements remain (${elements.length - nonZeroElements.length} removed)`);
+  nonZeroElements.forEach(element => seen.add(element.xpath));
+  const filteredByParent = nonZeroElements.filter(element => {
+    const parentXPath = findClosestParent(seen, element.xpath);
+    return parentXPath == null || shouldKeepNestedElement(element, parentXPath);
   });
-  
-  // Second pass - remove elements that share the same space
-  const filteredResults = result.filter((element, index) => {
-    const overlapping = result.find((other, otherIndex) => {
-      if (index === otherIndex) return false;
-      
-      const box1 = element.bounding_box;
-      const box2 = other.bounding_box;
-      
-      return (
-        box1.x === box2.x &&
-        box1.y === box2.y &&
-        box1.width === box2.width &&
-        box1.height === box2.height &&
-        element.text === other.text &&
-        other.tag === 'a'
-      );
+
+  console.log(`After parent/child filtering: ${filteredByParent.length} elements remain (${nonZeroElements.length - filteredByParent.length} removed)`);
+
+  // Final overlap filtering
+  const filteredResults = filteredByParent.filter(element => {
+    const overlapping = filteredByParent.some(other => {
+      if (element === other) return false; // Skip self
+      const isOverlapping = areElementsOverlapping(element, other);
+
+      if (isOverlapping) {
+        console.debug('Found overlapping elements:', {
+          element1: { tag: element.tag, xpath: element.xpath, text: element.text },
+          element2: { tag: other.tag, xpath: other.xpath, text: other.text }
+        });
+      }
+      return isOverlapping;
     });
     
     return !overlapping || element.tag === 'a';
   });
   
-  // Final pass - reindex elements from 0
+  console.log(`Final elements after filtering: ${filteredResults.length} (${filteredByParent.length - filteredResults.length} removed by overlap)`);
+  
   return filteredResults.map((element, index) => ({
     ...element,
     index: index.toString()
   }));
 }
+
+
+
+const areElementsOverlapping = (element1, element2) => {
+  const box1 = element1.bounding_box;
+  const box2 = element2.bounding_box;
+  
+  return box1.x === box2.x &&
+         box1.y === box2.y &&
+         box1.width === box2.width &&
+         box1.height === box2.height &&
+         element1.text === element2.text &&
+         element2.tag === 'a';
+};
+
+function findClosestParent(seen, xpath) {
+  // Split the xpath into segments
+  const segments = xpath.split('/');
+  
+  // Try increasingly shorter paths until we find one in the seen set
+  for (let i = segments.length - 1; i > 0; i--) {
+    const parentPath = segments.slice(0, i).join('/');
+    if (seen.has(parentPath)) {
+      return parentPath;
+    }
+  }
+  
+  return null;
+}
+
+function shouldKeepNestedElement(elementInfo, parentElement) {
+  // Special handling for form controls (input, select, textarea, button)
+  let result = false;
+  const isFormControl = /^(input|select|textarea|button)$/i.test(elementInfo.tag);
+  if (isFormControl || isDropdownItem(elementInfo)) {
+    result = true;
+  }
+  console.log(`shouldKeepNestedElement: ${elementInfo.tag} ${elementInfo.text} ${elementInfo.xpath} -> ${parentElement} -> ${result}`);
+  return result;
+}
+
+const isDropdownItem = (elementInfo) => {
+  const dropdownPatterns = [
+    /dropdown[-_]?item/i,    // matches: dropdown-item, dropdownitem, dropdown_item
+    /menu[-_]?item/i,        // matches: menu-item, menuitem, menu_item
+    /dropdown[-_]?link/i,    // matches: dropdown-link, dropdownlink, dropdown_link
+    /list[-_]?item/i,       // matches: list-item, listitem, list_item
+    /select[-_]?item/i,     // matches: select-item, selectitem, select_item  
+  ];
+
+  return elementInfo.element.className && 
+         dropdownPatterns.some(pattern => 
+           pattern.test(elementInfo.element.className)
+         );
+};
