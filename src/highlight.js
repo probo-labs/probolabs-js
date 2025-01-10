@@ -156,8 +156,9 @@ export function highlightElements(elements) {
       const text = document.createElement('span');
       text.style.cssText = `
         color: rgb(0, 0, 0, 0.8);
-        font-family: Arial, sans-serif;
-        font-size: 10px;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 12px;
+        font-weight: bold;
         line-height: 1;
       `;
       text.textContent = elementInfo.index;

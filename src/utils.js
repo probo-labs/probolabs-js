@@ -31,6 +31,66 @@ export function generateXPath(element) {
 }
 
 export function getElementInfo(element, index) {
+  function cleanHTML(rawHTML) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawHTML, "text/html");
+
+    function cleanElement(element) {
+      const allowedAttributes = new Set([
+        "role",
+        "type",
+        "class",
+        "href",
+        "alt",
+        "title",
+        "readonly",
+        "checked",
+        "enabled",
+        "disabled",
+      ]);
+
+      [...element.attributes].forEach(attr => {
+        const name = attr.name.toLowerCase();
+        const value = attr.value;
+
+        const isTestAttribute = /^(testid|test-id|data-test-id)$/.test(name);
+        const isDataAttribute = name.startsWith("data-") && value;
+        const isBooleanAttribute = ["readonly", "checked", "enabled", "disabled"].includes(name);
+
+        if (!allowedAttributes.has(name) && !isDataAttribute && !isTestAttribute && !isBooleanAttribute) {
+          element.removeAttribute(name);
+        }
+      });
+
+      // Handle SVG content - more aggressive replacement
+      if (element.tagName.toLowerCase() === "svg") {
+        // Remove all attributes except class and role
+        [...element.attributes].forEach(attr => {
+          const name = attr.name.toLowerCase();
+          if (name !== "class" && name !== "role") {
+            element.removeAttribute(name);
+          }
+        });
+        element.innerHTML = "CONTENT REMOVED";
+      } else {
+        // Recursively clean child elements
+        Array.from(element.children).forEach(cleanElement);
+      }
+
+      // Only remove empty elements that aren't semantic or icon elements
+      const keepEmptyElements = ['i', 'span', 'svg', 'button', 'input'];
+      if (!keepEmptyElements.includes(element.tagName.toLowerCase()) && 
+          !element.children.length && 
+          !element.textContent.trim()) {
+        element.remove();
+      }
+    }
+
+    // Process all elements in the document body
+    Array.from(doc.body.children).forEach(cleanElement);
+    return doc.body.innerHTML;
+  }
+
   // Get CSS selector
   const getCssPath = (el) => {
     const path = [];
@@ -68,7 +128,7 @@ export function getElementInfo(element, index) {
     tag: element.tagName.toLowerCase(),
     type: element.type || '',
     text: element.textContent.trim(),
-    html: element.outerHTML,
+    html: cleanHTML(element.outerHTML),
     xpath: generateXPath(element),
     css_selector: getCssPath(element),
     bounding_box: boundingBox
@@ -86,13 +146,13 @@ const filterZeroDimensions = (elementInfo) => {
   
   if (!hasSize || !isVisible) {
     if (elementInfo.element.isConnected) {
-      console.debug('Filtered out invisible/zero-size element:', {
-        tag: elementInfo.tag,
-        xpath: elementInfo.xpath,
-        hasSize,
-        isVisible,
-        dimensions: rect
-      });
+      // console.debug('Filtered out invisible/zero-size element:', {
+      //   tag: elementInfo.tag,
+      //   xpath: elementInfo.xpath,
+      //   hasSize,
+      //   isVisible,
+      //   dimensions: rect
+      // });
     }
     return false;
   }
@@ -110,7 +170,11 @@ export function uniquifyElements(elements) {
   nonZeroElements.forEach(element => seen.add(element.xpath));
   const filteredByParent = nonZeroElements.filter(element => {
     const parentXPath = findClosestParent(seen, element.xpath);
-    return parentXPath == null || shouldKeepNestedElement(element, parentXPath);
+    const keep = parentXPath == null || shouldKeepNestedElement(element, parentXPath);
+    // if (!keep) {
+    //   console.log(`Filtered out element ${element.index} because it's a nested element of ${parentXPath}`);
+    // }
+    return keep;
   });
 
   console.log(`After parent/child filtering: ${filteredByParent.length} elements remain (${nonZeroElements.length - filteredByParent.length} removed)`);
@@ -194,7 +258,7 @@ function shouldKeepNestedElement(elementInfo, parentXPath) {
     result = true;
   }
   
-  console.log(`shouldKeepNestedElement: ${elementInfo.tag} ${elementInfo.text} ${elementInfo.xpath} -> ${parentXPath} -> ${result}`);
+  // console.log(`shouldKeepNestedElement: ${elementInfo.tag} ${elementInfo.text} ${elementInfo.xpath} -> ${parentXPath} -> ${result}`);
   return result;
 }
 
