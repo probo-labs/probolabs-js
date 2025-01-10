@@ -1,6 +1,6 @@
 import { ElementTag } from './constants';
 import { findDropdowns, findClickables, findToggles, findNonInteractiveElements } from './finders';
-import { uniquifyElements, getElementInfo } from './utils';
+import { uniquifyElements, getElementInfo, getElementByXPath } from './utils';
 
 export const highlight = {
   execute: async function(elementTypes) {
@@ -98,20 +98,7 @@ export function highlightElements(elements) {
     document.body.appendChild(overlay);
   }
   
-  const getElementByXPath = (xpath) => {
-    const element = document.evaluate(
-      xpath, 
-      document, 
-      null, 
-      XPathResult.FIRST_ORDERED_NODE_TYPE, 
-      null
-    ).singleNodeValue;
-    
-    if (!element) {
-      console.warn('Failed to find element with xpath:', xpath);
-    }
-    return element;
-  };
+  
 
   const updateHighlights = () => {
     overlay.innerHTML = '';
