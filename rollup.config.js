@@ -24,4 +24,15 @@ export default [
         },
         plugins: [resolve(), commonjs(), terser()],
     },
+    // Plain JS for Browser Console
+    {
+        input: 'src/highlight.js',
+        output: {
+            file: 'dist/probolabs.console.js',
+            format: 'iife', // Immediately Invoked Function Expression
+            name: 'ProboLabs',
+            sourcemap: true,
+        },
+        plugins: [resolve(), commonjs()], // No terser for readability
+    },
 ];

@@ -1,6 +1,6 @@
 import { ElementTag } from './constants';
 import { findDropdowns, findClickables, findToggles, findNonInteractiveElements } from './finders';
-import { uniquifyElements, getElementInfo, getElementByXPath } from './utils';
+import { uniquifyElements, getElementInfo, getElementByXPathOrCssSelector } from './utils';
 
 export const highlight = {
   execute: async function(elementTypes) {
@@ -104,7 +104,7 @@ export function highlightElements(elements) {
     overlay.innerHTML = '';
     
     elements.forEach(elementInfo => {
-      const element = getElementByXPath(elementInfo.xpath);
+      const element = elementInfo.element; //getElementByXPathOrCssSelector(elementInfo);
       if (!element) return;
 
       const rect = element.getBoundingClientRect();

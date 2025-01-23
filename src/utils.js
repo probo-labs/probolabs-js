@@ -2,23 +2,35 @@ import { ElementInfo } from './constants';
 
 
 
-export const getElementByXPath = (xpath) => {
-  const element = document.evaluate(
-    xpath, 
-    document, 
-    null, 
-    XPathResult.FIRST_ORDERED_NODE_TYPE, 
-    null
-  ).singleNodeValue;
+export const getElementByXPathOrCssSelector = (element_info) => {
+  let element;
+
+  if (element_info.xpath) { //try xpath if exists
+    element = document.evaluate(
+      element_info.xpath, 
+      document, 
+      null, 
+      XPathResult.FIRST_ORDERED_NODE_TYPE, 
+      null
+    ).singleNodeValue;
   
-  if (!element) {
-    console.warn('Failed to find element with xpath:', xpath);
+    if (!element) {
+      console.warn('Failed to find element with xpath:', element_info.xpath);
+    }
   }
+  else { //try CSS selector
+    element = document.querySelector(element_info.css_selector);
+    // console.log('found element by CSS elector: ', element);
+    if (!element) {
+      console.warn('Failed to find element with CSS selector:', element_info.css_selector);
+    }
+  }
+
   return element;
 };
 
 export function generateXPath(element) {
-  if (!element) return '';
+  if (!element || element.getRootNode() instanceof ShadowRoot) return '';
   
   // If element has an id, use that (it's unique and shorter)
   if (element.id) {
@@ -45,6 +57,43 @@ export function generateXPath(element) {
   }
   
   return '/' + parts.join('/');
+}
+
+export function generateCssPath(element) {
+  const path = [];
+  while (element.nodeType === Node.ELEMENT_NODE) {    
+    let selector = element.nodeName.toLowerCase();
+    
+    if (element.id) {
+      selector = `#${element.id}`;
+      path.unshift(selector);
+      break;
+    } 
+    else {
+      let sibling = element;
+      let nth = 1;
+      while (sibling = sibling.previousElementSibling) {
+        if (sibling.nodeName.toLowerCase() === selector) nth++;
+      }
+      sibling = element;
+      let singleChild = true;
+      while (sibling = sibling.nextElementSibling) {
+        if (sibling.nodeName.toLowerCase() === selector) {
+          singleChild = false;
+          break;
+        }
+      }
+      if (nth > 1 || !singleChild) selector += `:nth-of-type(${nth})`;
+    }
+    path.unshift(selector);
+    element = element.parentNode;
+    // Check if we're at a shadow root
+    if (element.getRootNode() instanceof ShadowRoot) {
+      // Get the shadow root's host element
+      element = element.getRootNode().host;     
+    }
+  }
+  return path.join(' > ');
 }
 
 export function cleanHTML(rawHTML) {
@@ -108,31 +157,6 @@ export function cleanHTML(rawHTML) {
 }
 
 export function getElementInfo(element, index) {
-  
-
-  // Get CSS selector
-  const getCssPath = (el) => {
-    const path = [];
-    while (el.nodeType === Node.ELEMENT_NODE) {
-      let selector = el.nodeName.toLowerCase();
-      if (el.id) {
-        selector = `#${el.id}`;
-        path.unshift(selector);
-        break;
-      } else {
-        let sibling = el;
-        let nth = 1;
-        while (sibling = sibling.previousElementSibling) {
-          if (sibling.nodeName.toLowerCase() === selector) nth++;
-        }
-        if (nth > 1) selector += `:nth-of-type(${nth})`;
-      }
-      path.unshift(selector);
-      el = el.parentNode;
-    }
-    return path.join(' > ');
-  };
-
   // Get text content with spaces between elements
   function getTextContent(element) {
     const walker = document.createTreeWalker(
@@ -160,7 +184,8 @@ export function getElementInfo(element, index) {
   }
 
   const xpath = generateXPath(element);
-  
+  const css_selector = generateCssPath(element);
+
   // Return element info with pre-calculated values
   return new ElementInfo(element, index, {
     tag: element.tagName.toLowerCase(),
@@ -168,7 +193,7 @@ export function getElementInfo(element, index) {
     text: getTextContent(element),
     // html: cleanHTML(element.outerHTML),
     xpath: xpath,
-    css_selector: getCssPath(element),
+    css_selector: css_selector,
     bounding_box: element.getBoundingClientRect()
   });
 }
@@ -183,15 +208,16 @@ const filterZeroDimensions = (elementInfo) => {
   const isVisible = style.display !== 'none' && style.visibility !== 'hidden';
   
   if (!hasSize || !isVisible) {
-    if (elementInfo.element.isConnected) {
-      // console.debug('Filtered out invisible/zero-size element:', {
-      //   tag: elementInfo.tag,
-      //   xpath: elementInfo.xpath,
-      //   hasSize,
-      //   isVisible,
-      //   dimensions: rect
-      // });
-    }
+    // if (elementInfo.element.isConnected) {
+    //   console.log('Filtered out invisible/zero-size element:', {
+    //     tag: elementInfo.tag,
+    //     xpath: elementInfo.xpath,
+    //     element: elementInfo.element,
+    //     hasSize,
+    //     isVisible,
+    //     dimensions: rect
+    //   });
+    // }
     return false;
   }
   return true;
@@ -202,15 +228,22 @@ export function uniquifyElements(elements) {
   console.log(`Starting uniquification with ${elements.length} elements`);
   // First filter out elements with zero dimensions
   const nonZeroElements = elements.filter(filterZeroDimensions);
-  // sort by xpath length so parents are processed first
-  nonZeroElements.sort((a, b) => a.xpath.length - b.xpath.length);
+  // sort by CSS selector depth so parents are processed first
+  nonZeroElements.sort((a, b) => a.getDepth() - b.getDepth());
   console.log(`After dimension filtering: ${nonZeroElements.length} elements remain (${elements.length - nonZeroElements.length} removed)`);
-  nonZeroElements.forEach(element => seen.add(element.xpath));
-  const filteredByParent = nonZeroElements.filter(element => {
-    const parentXPath = findClosestParent(seen, element.xpath);
-    const keep = parentXPath == null || shouldKeepNestedElement(element, parentXPath);
-    // if (!keep) {
-    //   console.log(`Filtered out element ${element.index} because it's a nested element of ${parentXPath}`);
+  
+  nonZeroElements.forEach(element_info => seen.add(element_info.css_selector));
+    
+  nonZeroElements.forEach(info => {
+    if (!info.xpath) {
+      console.log(`Element ${info.index}:`, info);
+    }
+  });
+  const filteredByParent = nonZeroElements.filter(element_info => {
+    const parent = findClosestParent(seen, element_info);
+    const keep = parent == null || shouldKeepNestedElement(element_info, parent);
+    // if (!keep && !element_info.xpath) {
+    //   console.log("Filtered out element ", element_info," because it's a nested element of ", parent);
     // }
     return keep;
   });
@@ -239,17 +272,17 @@ export function uniquifyElements(elements) {
   console.log(`Final elements after filtering: ${filteredResults.length} (${filteredByParent.length - filteredResults.length} removed by overlap)`);
   
   // for debugging purposes, add a data-probolabs_index attribute to the element
-  filteredResults.forEach((element, index) => {
-    element.index = index.toString();
-    const foundElement = getElementByXPath(element.xpath);
+  filteredResults.forEach((elementInfo, index) => {
+    // elementInfo.index = index.toString();
+    const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
     if (foundElement) {
       foundElement.dataset.probolabs_index = index.toString();
     }
   });
 
   // final path cleanup the html
-  filteredResults.forEach(element => {
-    const foundElement = getElementByXPath(element.xpath);
+  filteredResults.forEach(elementInfo => {
+    const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
     if (foundElement) {
       //  const parser = new DOMParser();
       //  const doc = parser.parseFromString(foundElement.outerHTML, "text/html");
@@ -261,7 +294,7 @@ export function uniquifyElements(elements) {
       //  // Get the first element from the processed document
       //  const container = doc.body.firstElementChild;
       const clone = foundElement.cloneNode(false);  // false = don't clone children
-      element.html = clone.outerHTML;
+      elementInfo.element.html = clone.outerHTML;
     }
   });
 
@@ -273,7 +306,7 @@ export function uniquifyElements(elements) {
 
 
 const areElementsOverlapping = (element1, element2) => {
-  if (element1.xpath === element2.xpath) {
+  if (element1.css_selector === element2.css_selector) {
     return true;
   }
   
@@ -288,31 +321,50 @@ const areElementsOverlapping = (element1, element2) => {
         //  element2.tag === 'a';
 };
 
-function findClosestParent(seen, xpath) {
+function findClosestParent(seen, element_info) {  
+  // //Use element child/parent queries
+  // let parent = element_info.element.parentNode;
+  // if (parent.getRootNode() instanceof ShadowRoot) {
+  //   // Get the shadow root's host element
+  //   parent = parent.getRootNode().host;    
+  // }
+
+  // while (parent.nodeType === Node.ELEMENT_NODE) {    
+  //   const css_selector = generateCssPath(parent);
+  //   if (seen.has(css_selector)) {
+  //       console.log("element ", element_info, " closest parent is ", parent)
+  //       return parent;      
+  //   }
+  //   parent = parent.parentNode;
+  //   if (parent.getRootNode() instanceof ShadowRoot) {
+  //     // Get the shadow root's host element
+  //     parent = parent.getRootNode().host;      
+  //   }
+  // }
+
   // Split the xpath into segments
-  const segments = xpath.split('/');
+  const segments = element_info.css_selector.split(' > ');
   
   // Try increasingly shorter paths until we find one in the seen set
   for (let i = segments.length - 1; i > 0; i--) {
-    const parentPath = segments.slice(0, i).join('/');
+    const parentPath = segments.slice(0, i).join(' > ');
     if (seen.has(parentPath)) {
       return parentPath;
     }
   }
-  
+
   return null;
 }
 
-function shouldKeepNestedElement(elementInfo, parentXPath) {
+function shouldKeepNestedElement(elementInfo, parent) {
   let result = false;
   
   // If this is a checkbox/radio input
   if (elementInfo.tag === 'input' && 
       (elementInfo.type === 'checkbox' || elementInfo.type === 'radio')) {
     
-    // Check if parent is a label by looking at the parent xpath's last segment
-    const parentSegments = parentXPath.split('/');
-    const isParentLabel = parentSegments[parentSegments.length - 1].startsWith('label[');
+    // Check if parent is a label by looking at the parent tag name
+    const isParentLabel = parent.tagName.toLowerCase() === 'label';
     
     // If parent is a label, don't keep the input (we'll keep the label instead)
     if (isParentLabel) {
