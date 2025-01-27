@@ -36,7 +36,7 @@ export class ElementInfo {
       depth++;
       
       currentElement = currentElement.parentElement;      
-      if (currentElement && currentElement.getRootNode() instanceof ShadowRoot) {
+      if (currentElement && currentElement.nodeType !== Node.ELEMENT_NODE && currentElement.getRootNode() instanceof ShadowRoot) {
         // Skip to shadow host, counting it as one level
         currentElement = currentElement.getRootNode().host;
       }

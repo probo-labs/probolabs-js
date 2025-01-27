@@ -64,33 +64,41 @@ export function generateCssPath(element) {
   while (element.nodeType === Node.ELEMENT_NODE) {    
     let selector = element.nodeName.toLowerCase();
     
-    if (element.id) {
-      selector = `#${element.id}`;
-      path.unshift(selector);
-      break;
-    } 
-    else {
-      let sibling = element;
-      let nth = 1;
-      while (sibling = sibling.previousElementSibling) {
-        if (sibling.nodeName.toLowerCase() === selector) nth++;
-      }
-      sibling = element;
-      let singleChild = true;
-      while (sibling = sibling.nextElementSibling) {
-        if (sibling.nodeName.toLowerCase() === selector) {
-          singleChild = false;
-          break;
-        }
-      }
-      if (nth > 1 || !singleChild) selector += `:nth-of-type(${nth})`;
+    // if (element.id) {
+    //   //escape special characters
+    //   const normalized_id = element.id.replace(/[:;.#()[\]!@$%^&*]/g, '\\$&');
+    //   selector = `#${normalized_id}`;
+    //   path.unshift(selector);
+    //   break;
+    // } 
+    
+    let sibling = element;
+    let nth = 1;
+    while (sibling = sibling.previousElementSibling) {
+      if (sibling.nodeName.toLowerCase() === selector) nth++;
     }
+    sibling = element;
+    let singleChild = true;
+    while (sibling = sibling.nextElementSibling) {
+      if (sibling.nodeName.toLowerCase() === selector) {
+        singleChild = false;
+        break;
+      }
+    }
+    if (nth > 1 || !singleChild) selector += `:nth-of-type(${nth})`;
+  
     path.unshift(selector);
-    element = element.parentNode;
-    // Check if we're at a shadow root
-    if (element.getRootNode() instanceof ShadowRoot) {
-      // Get the shadow root's host element
-      element = element.getRootNode().host;     
+
+    if (element.assignedSlot) {
+      element = element.assignedSlot;
+    }
+    else {
+      element = element.parentNode;
+      // Check if we're at a shadow root
+      if (element.nodeType !== Node.ELEMENT_NODE && element.getRootNode() instanceof ShadowRoot) {
+        // Get the shadow root's host element
+        element = element.getRootNode().host;     
+      }
     }
   }
   return path.join(' > ');
@@ -191,7 +199,7 @@ export function getElementInfo(element, index) {
     tag: element.tagName.toLowerCase(),
     type: element.type || '',
     text: getTextContent(element),
-    // html: cleanHTML(element.outerHTML),
+    html: cleanHTML(element.outerHTML),
     xpath: xpath,
     css_selector: css_selector,
     bounding_box: element.getBoundingClientRect()
@@ -235,9 +243,9 @@ export function uniquifyElements(elements) {
   nonZeroElements.forEach(element_info => seen.add(element_info.css_selector));
     
   nonZeroElements.forEach(info => {
-    if (!info.xpath) {
-      console.log(`Element ${info.index}:`, info);
-    }
+    // if (!info.xpath) {
+    //   console.log(`Element ${info.index}:`, info);
+    // }
   });
   const filteredByParent = nonZeroElements.filter(element_info => {
     const parent = findClosestParent(seen, element_info);
@@ -272,31 +280,31 @@ export function uniquifyElements(elements) {
   console.log(`Final elements after filtering: ${filteredResults.length} (${filteredByParent.length - filteredResults.length} removed by overlap)`);
   
   // for debugging purposes, add a data-probolabs_index attribute to the element
-  filteredResults.forEach((elementInfo, index) => {
-    // elementInfo.index = index.toString();
-    const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
-    if (foundElement) {
-      foundElement.dataset.probolabs_index = index.toString();
-    }
-  });
+  // filteredResults.forEach((elementInfo, index) => {
+  //   // elementInfo.index = index.toString();
+  //   const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
+  //   if (foundElement) {
+  //     foundElement.dataset.probolabs_index = index.toString();
+  //   }
+  // });
 
   // final path cleanup the html
-  filteredResults.forEach(elementInfo => {
-    const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
-    if (foundElement) {
-      //  const parser = new DOMParser();
-      //  const doc = parser.parseFromString(foundElement.outerHTML, "text/html");
-      //  doc.querySelectorAll('[data-probolabs_index]').forEach(el => {
-      //    if (el.dataset.probolabs_index !== element.index) {
-      //      el.remove();
-      //    }
-      //  });
-      //  // Get the first element from the processed document
-      //  const container = doc.body.firstElementChild;
-      const clone = foundElement.cloneNode(false);  // false = don't clone children
-      elementInfo.element.html = clone.outerHTML;
-    }
-  });
+  // filteredResults.forEach(elementInfo => {
+  //   const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
+  //   if (foundElement) {
+  //     //  const parser = new DOMParser();
+  //     //  const doc = parser.parseFromString(foundElement.outerHTML, "text/html");
+  //     //  doc.querySelectorAll('[data-probolabs_index]').forEach(el => {
+  //     //    if (el.dataset.probolabs_index !== element.index) {
+  //     //      el.remove();
+  //     //    }
+  //     //  });
+  //     //  // Get the first element from the processed document
+  //     //  const container = doc.body.firstElementChild;
+  //     const clone = foundElement.cloneNode(false);  // false = don't clone children
+  //     elementInfo.element.html = clone.outerHTML;
+  //   }
+  // });
 
   return filteredResults;
 

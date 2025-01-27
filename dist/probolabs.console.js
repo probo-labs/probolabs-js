@@ -39,7 +39,7 @@ var ProboLabs = (function (exports) {
         depth++;
         
         currentElement = currentElement.parentElement;      
-        if (currentElement && currentElement.getRootNode() instanceof ShadowRoot) {
+        if (currentElement && currentElement.nodeType !== Node.ELEMENT_NODE && currentElement.getRootNode() instanceof ShadowRoot) {
           // Skip to shadow host, counting it as one level
           currentElement = currentElement.getRootNode().host;
         }
@@ -49,6 +49,33 @@ var ProboLabs = (function (exports) {
       return this.depth;
     }
   }
+
+  const getElementByXPathOrCssSelector = (element_info) => {
+    let element;
+
+    if (element_info.xpath) { //try xpath if exists
+      element = document.evaluate(
+        element_info.xpath, 
+        document, 
+        null, 
+        XPathResult.FIRST_ORDERED_NODE_TYPE, 
+        null
+      ).singleNodeValue;
+    
+      if (!element) {
+        console.warn('Failed to find element with xpath:', element_info.xpath);
+      }
+    }
+    else { //try CSS selector
+      element = document.querySelector(element_info.css_selector);
+      // console.log('found element by CSS elector: ', element);
+      if (!element) {
+        console.warn('Failed to find element with CSS selector:', element_info.css_selector);
+      }
+    }
+
+    return element;
+  };
 
   function generateXPath(element) {
     if (!element || element.getRootNode() instanceof ShadowRoot) return '';
@@ -85,36 +112,104 @@ var ProboLabs = (function (exports) {
     while (element.nodeType === Node.ELEMENT_NODE) {    
       let selector = element.nodeName.toLowerCase();
       
-      if (element.id) {
-        selector = `#${element.id}`;
-        path.unshift(selector);
-        break;
-      } 
-      else {
-        let sibling = element;
-        let nth = 1;
-        while (sibling = sibling.previousElementSibling) {
-          if (sibling.nodeName.toLowerCase() === selector) nth++;
-        }
-        sibling = element;
-        let singleChild = true;
-        while (sibling = sibling.nextElementSibling) {
-          if (sibling.nodeName.toLowerCase() === selector) {
-            singleChild = false;
-            break;
-          }
-        }
-        if (nth > 1 || !singleChild) selector += `:nth-of-type(${nth})`;
+      // if (element.id) {
+      //   //escape special characters
+      //   const normalized_id = element.id.replace(/[:;.#()[\]!@$%^&*]/g, '\\$&');
+      //   selector = `#${normalized_id}`;
+      //   path.unshift(selector);
+      //   break;
+      // } 
+      
+      let sibling = element;
+      let nth = 1;
+      while (sibling = sibling.previousElementSibling) {
+        if (sibling.nodeName.toLowerCase() === selector) nth++;
       }
+      sibling = element;
+      let singleChild = true;
+      while (sibling = sibling.nextElementSibling) {
+        if (sibling.nodeName.toLowerCase() === selector) {
+          singleChild = false;
+          break;
+        }
+      }
+      if (nth > 1 || !singleChild) selector += `:nth-of-type(${nth})`;
+    
       path.unshift(selector);
-      element = element.parentNode;
-      // Check if we're at a shadow root
-      if (element.getRootNode() instanceof ShadowRoot) {
-        // Get the shadow root's host element
-        element = element.getRootNode().host;     
+
+      if (element.assignedSlot) {
+        element = element.assignedSlot;
+      }
+      else {
+        element = element.parentNode;
+        // Check if we're at a shadow root
+        if (element.nodeType !== Node.ELEMENT_NODE && element.getRootNode() instanceof ShadowRoot) {
+          // Get the shadow root's host element
+          element = element.getRootNode().host;     
+        }
       }
     }
     return path.join(' > ');
+  }
+
+  function cleanHTML(rawHTML) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawHTML, "text/html");
+
+    function cleanElement(element) {
+      const allowedAttributes = new Set([
+        "role",
+        "type",
+        "class",
+        "href",
+        "alt",
+        "title",
+        "readonly",
+        "checked",
+        "enabled",
+        "disabled",
+      ]);
+
+      [...element.attributes].forEach(attr => {
+        const name = attr.name.toLowerCase();
+        const value = attr.value;
+
+        const isTestAttribute = /^(testid|test-id|data-test-id)$/.test(name);
+        const isDataAttribute = name.startsWith("data-") && value;
+        const isBooleanAttribute = ["readonly", "checked", "enabled", "disabled"].includes(name);
+
+        if (!allowedAttributes.has(name) && !isDataAttribute && !isTestAttribute && !isBooleanAttribute) {
+          element.removeAttribute(name);
+        }
+      });
+
+      // Handle SVG content - more aggressive replacement
+      if (element.tagName.toLowerCase() === "svg") {
+        // Remove all attributes except class and role
+        [...element.attributes].forEach(attr => {
+          const name = attr.name.toLowerCase();
+          if (name !== "class" && name !== "role") {
+            element.removeAttribute(name);
+          }
+        });
+        element.innerHTML = "CONTENT REMOVED";
+      } else {
+        // Recursively clean child elements
+        Array.from(element.children).forEach(cleanElement);
+      }
+
+      // Only remove empty elements that aren't semantic or icon elements
+      const keepEmptyElements = ['i', 'span', 'svg', 'button', 'input'];
+      if (!keepEmptyElements.includes(element.tagName.toLowerCase()) && 
+          !element.children.length && 
+          !element.textContent.trim()) {
+        element.remove();
+      }
+    }
+
+    // Process all elements in the document body
+    Array.from(doc.body.children).forEach(cleanElement);
+    return doc.body.innerHTML;
   }
 
   function getElementInfo(element, index) {
@@ -152,7 +247,7 @@ var ProboLabs = (function (exports) {
       tag: element.tagName.toLowerCase(),
       type: element.type || '',
       text: getTextContent(element),
-      // html: cleanHTML(element.outerHTML),
+      html: cleanHTML(element.outerHTML),
       xpath: xpath,
       css_selector: css_selector,
       bounding_box: element.getBoundingClientRect()
@@ -196,9 +291,9 @@ var ProboLabs = (function (exports) {
     nonZeroElements.forEach(element_info => seen.add(element_info.css_selector));
       
     nonZeroElements.forEach(info => {
-      if (!info.xpath) {
-        console.log(`Element ${info.index}:`, info);
-      }
+      // if (!info.xpath) {
+      //   console.log(`Element ${info.index}:`, info);
+      // }
     });
     const filteredByParent = nonZeroElements.filter(element_info => {
       const parent = findClosestParent(seen, element_info);
@@ -233,31 +328,31 @@ var ProboLabs = (function (exports) {
     console.log(`Final elements after filtering: ${filteredResults.length} (${filteredByParent.length - filteredResults.length} removed by overlap)`);
     
     // for debugging purposes, add a data-probolabs_index attribute to the element
-    filteredResults.forEach((elementInfo, index) => {
-      // elementInfo.index = index.toString();
-      const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
-      if (foundElement) {
-        foundElement.dataset.probolabs_index = index.toString();
-      }
-    });
+    // filteredResults.forEach((elementInfo, index) => {
+    //   // elementInfo.index = index.toString();
+    //   const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
+    //   if (foundElement) {
+    //     foundElement.dataset.probolabs_index = index.toString();
+    //   }
+    // });
 
     // final path cleanup the html
-    filteredResults.forEach(elementInfo => {
-      const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
-      if (foundElement) {
-        //  const parser = new DOMParser();
-        //  const doc = parser.parseFromString(foundElement.outerHTML, "text/html");
-        //  doc.querySelectorAll('[data-probolabs_index]').forEach(el => {
-        //    if (el.dataset.probolabs_index !== element.index) {
-        //      el.remove();
-        //    }
-        //  });
-        //  // Get the first element from the processed document
-        //  const container = doc.body.firstElementChild;
-        const clone = foundElement.cloneNode(false);  // false = don't clone children
-        elementInfo.element.html = clone.outerHTML;
-      }
-    });
+    // filteredResults.forEach(elementInfo => {
+    //   const foundElement = elementInfo.element; //getElementByXPathOrCssSelector(element);
+    //   if (foundElement) {
+    //     //  const parser = new DOMParser();
+    //     //  const doc = parser.parseFromString(foundElement.outerHTML, "text/html");
+    //     //  doc.querySelectorAll('[data-probolabs_index]').forEach(el => {
+    //     //    if (el.dataset.probolabs_index !== element.index) {
+    //     //      el.remove();
+    //     //    }
+    //     //  });
+    //     //  // Get the first element from the processed document
+    //     //  const container = doc.body.firstElementChild;
+    //     const clone = foundElement.cloneNode(false);  // false = don't clone children
+    //     elementInfo.element.html = clone.outerHTML;
+    //   }
+    // });
 
     return filteredResults;
 
@@ -568,7 +663,7 @@ var ProboLabs = (function (exports) {
 
   async function findElements(elementTypes) {
     const typesArray = Array.isArray(elementTypes) ? elementTypes : [elementTypes];
-    console.log('🔍 Starting element search for types:', typesArray);
+    console.log('Starting element search for types:', typesArray);
 
     const elements = [];
     typesArray.forEach(elementType => {
@@ -640,9 +735,13 @@ var ProboLabs = (function (exports) {
       overlay.innerHTML = '';
       
       elements.forEach(elementInfo => {
-        const element = elementInfo.element; //getElementByXPathOrCssSelector(elementInfo);
-        if (!element) return;
-
+        let element = elementInfo.element; //getElementByXPathOrCssSelector(elementInfo);
+        if (!element) {
+          element = getElementByXPathOrCssSelector(elementInfo);
+          if (!element)
+            return;
+        }
+        
         const rect = element.getBoundingClientRect();
         // console.log('Element rect:', elementInfo.tag, rect);
         
