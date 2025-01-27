@@ -1,6 +1,6 @@
 import { ElementTag } from './constants';
 import { findDropdowns, findClickables, findToggles, findNonInteractiveElements } from './finders';
-import { uniquifyElements, getElementInfo, getElementByXPath } from './utils';
+import { uniquifyElements, getElementInfo, getElementByXPathOrCssSelector } from './utils';
 
 export const highlight = {
   execute: async function(elementTypes) {
@@ -32,7 +32,7 @@ export function unhighlightElements() {
 
 export async function findElements(elementTypes) {
   const typesArray = Array.isArray(elementTypes) ? elementTypes : [elementTypes];
-  console.log('🔍 Starting element search for types:', typesArray);
+  console.log('Starting element search for types:', typesArray);
 
   const elements = [];
   typesArray.forEach(elementType => {
@@ -104,9 +104,13 @@ export function highlightElements(elements) {
     overlay.innerHTML = '';
     
     elements.forEach(elementInfo => {
-      const element = getElementByXPath(elementInfo.xpath);
-      if (!element) return;
-
+      let element = elementInfo.element; //getElementByXPathOrCssSelector(elementInfo);
+      if (!element) {
+        element = getElementByXPathOrCssSelector(elementInfo);
+        if (!element)
+          return;
+      }
+      
       const rect = element.getBoundingClientRect();
       // console.log('Element rect:', elementInfo.tag, rect);
       

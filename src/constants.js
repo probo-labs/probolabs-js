@@ -16,5 +16,33 @@ export class ElementInfo {
     this.css_selector = css_selector;
     this.bounding_box = bounding_box;
     this.element = element;
+    this.depth = -1;
+  }
+
+  getSelector() {
+    return this.xpath ? this.xpath : this.css_selector;
+  }
+
+  getDepth() {
+    if (this.depth >= 0) {
+      return this.depth;
+    }
+
+    // Handle shadow DOM by counting host elements as 1 level
+    let depth = 0;
+    let currentElement = this.element;
+    
+    while (currentElement && currentElement.nodeType === Node.ELEMENT_NODE) {
+      depth++;
+      
+      currentElement = currentElement.parentElement;      
+      if (currentElement && currentElement.nodeType !== Node.ELEMENT_NODE && currentElement.getRootNode() instanceof ShadowRoot) {
+        // Skip to shadow host, counting it as one level
+        currentElement = currentElement.getRootNode().host;
+      }
+    }
+    
+    this.depth = depth;
+    return this.depth;
   }
 }
