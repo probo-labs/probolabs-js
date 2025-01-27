@@ -391,7 +391,7 @@ function shouldKeepNestedElement(elementInfo, parent) {
 
 // Helper function to check if element is a form control
 function isFormControl(elementInfo) {
-  return /^(input|select|textarea|button)$/i.test(elementInfo.tag);
+  return /^(input|select|textarea|button|label)$/i.test(elementInfo.tag);
 }
 
 const isDropdownItem = (elementInfo) => {
